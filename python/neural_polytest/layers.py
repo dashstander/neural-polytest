@@ -72,8 +72,8 @@ class PolyEncoder(eqx.Module):
         Returns:
             Array of shape (batch, poly_dim) encoding the full polynomial
         """
-        x = jax.vmap(self.proj_up)(coeffs)
-        return jnp.squeeze(jax.vmap(self.proj_mix)(x.transpose(0, 2, 1)).transpose(0, 2, 1), axis=1)
+        x = jax.vmap(self.proj_up)(coeffs.transpose(0, 2, 1)).transpose(0, 2, 1)
+        return jnp.squeeze(jax.vmap(self.proj_mix)(x), axis=1)
 
 
 class PolynomialUnembed(eqx.Module):
@@ -107,6 +107,7 @@ class PolynomialUnembed(eqx.Module):
             Array of shape (batch, p, p) containing predicted coefficients
         """
         return jax.vmap(lambda v: jnp.einsum('ijk,k->ij', self.unembed, v))(x)
+
 
 class PolynomialMultiplicationMLP(eqx.Module):
     """Neural network for multiplying polynomials over finite fields.
@@ -161,10 +162,11 @@ class PolynomialMultiplicationMLP(eqx.Module):
         y_enc = self.poly_encode(embed_y)
         xy_encoding = jnp.concatenate([x_enc, y_enc], axis=1)
 
-        activations = self.linear0(xy_encoding)
+        activations = jax.vmap(self.linear0)(xy_encoding)
         logits = self.unembed(jax.nn.relu(activations))
         
         return PolynomialPredictions(logits)
+
 
 @dataclass
 class PolynomialPredictions:
@@ -204,14 +206,3 @@ class PolynomialPredictions:
             Array of shape (batch, degree+1) containing predicted coefficients
         """
         return jnp.argmax(self.logits, axis=-1)
-
-# Example usage
-#key = jax.random.PRNGKey(0)
-#model = PolynomialMultiplicationMLP(5, 128, 256, 1024, key=key)
-
-# x^3 + 2x^2 + 3x + 4 and x^4 + x^3
-#polynomials_x = jnp.array([[0, 1, 2, 3, 4], [1, 1, 0, 0, 0]])
-# 4x^4 + 3x^3 + 2x^2 + x, x^4 + x^3 + x^2 + x + 1
-#polynomials_y = jnp.array([[4, 3, 2, 1, 0], [1, 1, 1, 1, 1]])
-
-#predictions = model(polynomials_x, polynomials_y)

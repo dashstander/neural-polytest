@@ -1,0 +1,13 @@
+[package]
+name = "neural-polytest"
+version = "0.1.0"
+
+[lib]
+name = "neural_polytest"
+crate-type = ["cdylib"]
+edition = "2021"
+
+[dependencies]
+pyo3 = { version = "0.18.0", features = ["extension-module"] }
+numpy = "0.18"
+rand = "0.8"

@@ -6,14 +6,11 @@ authors = [
     { name = "Dashiell Stander", email = "dash.stander@gmail.com" }
 ]
 dependencies = [
-    "jupyterlab>=4.3.4",
     "galois>=0.4.3",
-    "torch>=2.5.1",
-    "equinox>=0.11.10",
-    "jax[tpu]>=0.4.38",
+    "jax>=0.4.38",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = ">= 3.12"
 
 [build-system]
 requires = ["hatchling"]
@@ -21,15 +18,15 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = []
-
-[[tool.rye.sources]]
-name = "google-jax"
-url = "https://storage.googleapis.com/jax-releases/libtpu_releases.html"
-type = "find-links"
+dev-dependencies = [
+    "pip>=24.3.1",
+    "ruff>=0.8.4",
+    "jupyterlab>=4.3.4",
+    "pytest>=8.3.4",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/neural_polytest"]
+packages = ["python/neural_polytest"]
