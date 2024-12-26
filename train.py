@@ -171,8 +171,8 @@ if __name__ == '__main__':
         if epoch % 1 == 0:
             #train_acc = evaluate(model, X_left_train, X_right_train, y_train, batch_size, n_devices)
             #test_acc = evaluate(model, X_left_test, X_right_test, y_test, batch_size, n_devices)
-            test_x_left, test_x_right, test_y = next(test_iter)
-            test_loss = eval_step(model, test_x_left, test_x_right, test_y)
+            test_x, test_y = next(test_iter)
+            test_loss = eval_step(model, test_x, test_y)
             
             metrics = {
                 "train/loss": train_loss,
