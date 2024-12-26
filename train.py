@@ -32,7 +32,6 @@ def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
     return iterator, steps_per_epoch
 
 
-@eqx.filter_value_and_grad
 def compute_loss(model, batch_x, batch_y):
     x_left, x_right = batch_x
     pred = model(x_left, x_right)
@@ -45,7 +44,7 @@ def compute_loss(model, batch_x, batch_y):
 
 @partial(jax.pmap, axis_name='batch')
 def train_step(model, opt_state, batch_x, batch_y):
-    loss_val, grads = compute_loss(model, batch_x, batch_y)
+    loss_val, grads = eqx.filter_value_and_grad(compute_loss)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
     updates, new_opt_state = optimizer.update(grads, opt_state)
@@ -54,10 +53,11 @@ def train_step(model, opt_state, batch_x, batch_y):
 
 @partial(jax.pmap, axis_name='batch')
 def eval_step(model, batch_x_left, batch_x_right, batch_y):
-    pred = model(batch_x_left, batch_x_right)
-    predictions = pred.get_predictions()
-    correct = (predictions == batch_y).all(axis=-1).mean()
-    return correct
+    #pred = model(batch_x_left, batch_x_right)
+    #predictions = pred.get_predictions()
+    #correct = (predictions == batch_y).all(axis=-1).mean()
+    loss = compute_loss(model, batch_x_left, batch_x_right, batch_y)
+    return jax.lax.pmean(loss, axis_name='batch')
 
 
 def train_epoch(model, opt_state, iterator, steps_per_epoch):
@@ -92,10 +92,10 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 100
+    n_epochs = 1000
     seed = 0
     train_pcnt = 0.95
-    batch_size = 8192
+    batch_size = 2 ** 13
 
     embed_dimension = 128
     poly_dimension = 256
@@ -152,12 +152,18 @@ if __name__ == '__main__':
     opt_state = jax.device_put_replicated(opt_state, jax.devices())
 
     # Training loop
-    key, data_key1, data_key2, key = jax.random.split(key, num=4)
+    key, data_keys = jax.random.split(key, num=5)
     train_iterator, steps_per_epoch = make_batch_iterator(
         X_left_train, X_right_train, y_train, 
-        batch_size, n_devices, data_key1
+        batch_size, n_devices, data_keys[0]
     )
-    train_iter = train_iterator(data_key2)
+    train_iter = train_iterator(data_keys[1])
+
+    test_iterator, _ = make_batch_iterator(
+        X_left_train, X_right_train, y_train, 
+        batch_size, n_devices, data_keys[2]
+    )
+    test_iter = test_iterator(data_keys[3])
 
     for epoch in tqdm(range(n_epochs)):
         model, opt_state, train_loss = train_epoch(model, opt_state, train_iter, steps_per_epoch)
@@ -165,11 +171,13 @@ if __name__ == '__main__':
         if epoch % 1 == 0:
             #train_acc = evaluate(model, X_left_train, X_right_train, y_train, batch_size, n_devices)
             #test_acc = evaluate(model, X_left_test, X_right_test, y_test, batch_size, n_devices)
+            test_x_left, test_x_right, test_y = next(test_iter)
+            test_loss = eval_step(model, test_x_left, test_x_right, test_y)
             
             metrics = {
                 "train/loss": train_loss,
                 #"train/accuracy": train_acc,
-                #"test/accuracy": test_acc,
+                "test/loss": test_loss,
                 "epoch": epoch,
             }
             wandb.log(metrics)
