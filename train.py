@@ -188,7 +188,7 @@ if __name__ == '__main__':
             metrics = {
                 "train/loss": train_loss,
                 #"train/accuracy": train_acc,
-                "test/loss": test_loss,
+                "test/loss": jnp.mean(test_loss),
                 "epoch": epoch,
             }
             wandb.log(metrics)
