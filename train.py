@@ -95,7 +95,7 @@ if __name__ == '__main__':
     n_epochs = 100
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2048
+    batch_size = 8192
 
     embed_dimension = 128
     poly_dimension = 256
