@@ -170,7 +170,7 @@ impl PyGFPolynomial {
 }
 
 #[pymodule]
-fn neural_polytest(_py: Python, m: &PyModule) -> PyResult<()> {
+fn finite_fields(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyGFPolynomial>()?;
     Ok(())
 }

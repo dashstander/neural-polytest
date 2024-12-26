@@ -8,6 +8,10 @@ authors = [
 dependencies = [
     "galois>=0.4.3",
     "jax>=0.4.38",
+    "optax>=0.2.4",
+    "wandb>=0.19.1",
+    "equinox>=0.11.11",
+    "tqdm>=4.67.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -24,6 +28,10 @@ dev-dependencies = [
     "jupyterlab>=4.3.4",
     "pytest>=8.3.4",
 ]
+
+[tool.maturin]
+python-source = "python"
+module-name = "neural_polytest.finite_fields"
 
 [tool.hatch.metadata]
 allow-direct-references = true

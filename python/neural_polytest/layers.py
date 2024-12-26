@@ -5,38 +5,26 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-
 class FieldEmbed(eqx.Module):
-    """Learns embeddings for elements of a finite field F_p.
-    
-    Args:
-        p (int): Size of the finite field
-        embed_dim (int): Dimension of the embedding vectors
-    """
+    """Learns embeddings for elements of a finite field F_p."""
     p: int
     embed_dim: int
-    embedding: jnp.ndarray
+    embedding: eqx.nn.Embedding
 
     def __init__(self, p: int, embed_dim: int, *, key):
         super().__init__()
         self.p = p
         self.embed_dim = embed_dim
         
-        # Initialize embeddings with scaled normal distribution
-        scale = math.sqrt(1.0 / embed_dim)
-        self.embedding = jax.random.normal(key, (p, embed_dim)) * scale
+        self.embedding = eqx.nn.Embedding(
+            num_embeddings=p,
+            embedding_size=embed_dim,
+            key=key
+        )
     
     def __call__(self, coeffs):
-        """Maps coefficients to their embeddings.
-        
-        Args:
-            coeffs: Array of shape (..., p) containing field elements in [0, p-1]
-                   Each row represents coefficients of a polynomial
-                   
-        Returns:
-            Array of shape (..., p, embed_dim) containing embedded coefficients
-        """
-        return self.embedding[coeffs]
+        """Maps coefficients to their embeddings."""
+        return jax.vmap(jax.vmap(self.embedding))(coeffs)
 
 
 class PolyEncoder(eqx.Module):
