@@ -60,15 +60,26 @@ def eval_step(model, batch_x, batch_y):
     return jax.lax.pmean(loss, axis_name='batch')
 
 
-def train_epoch(model, opt_state, iterator, steps_per_epoch):
+def train_epoch(model, opt_state, iterator, steps_per_epoch, log_every=5):
     total_loss = 0
+    running_loss = 0
     
-    for _ in range(steps_per_epoch):
+    for step in range(steps_per_epoch):
         batch_x, batch_y = next(iterator)
         model, opt_state, loss = train_step(model, opt_state, batch_x, batch_y)
-        total_loss += loss.mean()
+        step_loss = loss.mean()
+        total_loss += step_loss
+        running_loss += step_loss
+        
+        if (step + 1) % log_every == 0:
+            wandb.log({
+                "train/step_loss": running_loss / log_every,
+                "step": step + 1,
+            })
+            running_loss = 0
         
     return model, opt_state, total_loss / steps_per_epoch
+
 
 def evaluate(model, X_left, X_right, y, batch_size, n_devices):
     n_batches = len(X_left) // batch_size
