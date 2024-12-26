@@ -119,7 +119,7 @@ if __name__ == '__main__':
     field_poly_left, field_poly_right, field_poly_prod = GF.generate_all()
 
     # Create train/test split
-    np.random.seed(42)
+    np.random.seed(seed)
     indices = np.random.permutation(len(field_poly_left))
     split = int(train_pcnt * len(indices))
     train_idx, test_idx = indices[:split], indices[split:]
@@ -163,17 +163,17 @@ if __name__ == '__main__':
         model, opt_state, train_loss = train_epoch(model, opt_state, train_iter, steps_per_epoch)
     
         if epoch % 1 == 0:
-            train_acc = evaluate(model, X_left_train, X_right_train, y_train, batch_size, n_devices)
-            test_acc = evaluate(model, X_left_test, X_right_test, y_test, batch_size, n_devices)
+            #train_acc = evaluate(model, X_left_train, X_right_train, y_train, batch_size, n_devices)
+            #test_acc = evaluate(model, X_left_test, X_right_test, y_test, batch_size, n_devices)
             
             metrics = {
                 "train/loss": train_loss,
-                "train/accuracy": train_acc,
-                "test/accuracy": test_acc,
+                #"train/accuracy": train_acc,
+                #"test/accuracy": test_acc,
                 "epoch": epoch,
             }
             wandb.log(metrics)
             
-            print(f"Epoch {epoch}: Loss = {train_loss:.4f}, Train Acc = {train_acc:.4f}, Test Acc = {test_acc:.4f}")
+            print(f"Epoch {epoch}: Loss = {train_loss:.4f}")
 
     wandb.finish()
