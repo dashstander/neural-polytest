@@ -162,7 +162,7 @@ if __name__ == '__main__':
     for epoch in tqdm(range(n_epochs)):
         model, opt_state, train_loss = train_epoch(model, opt_state, train_iter, steps_per_epoch)
     
-        if epoch % 5 == 0:
+        if epoch % 1 == 0:
             train_acc = evaluate(model, X_left_train, X_right_train, y_train, batch_size, n_devices)
             test_acc = evaluate(model, X_left_test, X_right_test, y_test, batch_size, n_devices)
             
