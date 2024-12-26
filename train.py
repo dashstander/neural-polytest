@@ -152,7 +152,7 @@ if __name__ == '__main__':
     opt_state = jax.device_put_replicated(opt_state, jax.devices())
 
     # Training loop
-    key, data_keys = jax.random.split(key, num=5)
+    key, *data_keys = jax.random.split(key, num=5)
     train_iterator, steps_per_epoch = make_batch_iterator(
         X_left_train, X_right_train, y_train, 
         batch_size, n_devices, data_keys[0]
