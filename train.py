@@ -106,7 +106,7 @@ if __name__ == '__main__':
     n_epochs = 1000
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 13
+    batch_size = 2 ** 14
 
     embed_dimension = 128
     poly_dimension = 256
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     key = jax.random.PRNGKey(seed)
     key, model_key = jax.random.split(key)
     model = PolynomialMultiplicationMLP(p, embed_dimension, poly_dimension, model_dimension, key=model_key)
-    optimizer = optax.adam(learning_rate=1e-3)
+    optimizer = optax.adam(learning_rate=1e-4)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
 
     # Replicate model and optimizer state across devices
