@@ -79,11 +79,11 @@ class PolynomialUnembed(eqx.Module):
     """
     unembed: jnp.ndarray
 
-    def __init__(self, p: int, model_dim: int, *, key):
+    def __init__(self, p: int, input_dim: int, *, key):
         super().__init__()
         # Kaiming initialization
-        std = math.sqrt(2.0 / model_dim)
-        self.unembed = jax.random.normal(key, (p, p, model_dim)) * std
+        std = math.sqrt(2.0 / input_dim)
+        self.unembed = jax.random.normal(key, (p, p, input_dim)) * std
 
     def __call__(self, x):
         """Projects model representations to polynomial coefficients.
