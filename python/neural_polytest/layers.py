@@ -127,8 +127,8 @@ class PolynomialMultiplicationMLP(eqx.Module):
         self.field_embed = FieldEmbed(p, embed_dim, key=keys[0])
         self.poly_encode = PolyEncoder(p, embed_dim, poly_dim, key=keys[1])
         self.linear0 = eqx.nn.Linear(2 * poly_dim, model_dim, key=keys[2])
-        self.linear1 = eqx.nn.Linear(model_dim, 4*model_dim, key=keys[3])
-        self.unembed = PolynomialUnembed(p, 4*model_dim, key=keys[4])
+        self.linear1 = eqx.nn.Linear(model_dim, model_dim, key=keys[3])
+        self.unembed = PolynomialUnembed(p, model_dim, key=keys[4])
 
     def __call__(self, poly_x, poly_y):
         """Computes product of two polynomials.

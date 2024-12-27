@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
     embed_dimension = 128
     poly_dimension = 256
-    model_dimension = 1024
+    model_dimension = 2048
 
     train_lr = 1.0e-3
     #####################################
