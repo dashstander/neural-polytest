@@ -35,9 +35,11 @@ def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
 def compute_loss(model, batch_x, batch_y):
     x_left, x_right = batch_x
     pred = model(x_left, x_right)
+    # Convert integer labels to one-hot
+    targets = jax.nn.one_hot(batch_y.reshape(-1), num_classes=pred.field_size)
     per_example_loss = optax.softmax_cross_entropy(
         pred.logits.reshape(-1, pred.field_size),
-        jax.lax.expand_dims(batch_y.reshape(-1), [1])
+        targets
     )
     return jnp.mean(per_example_loss)
 
@@ -50,6 +52,7 @@ def train_step(model, opt_state, batch_x, batch_y):
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_model = eqx.apply_updates(model, updates)
     return new_model, new_opt_state, loss_val
+
 
 @partial(jax.pmap, axis_name='batch')
 def eval_step(model, batch_x, batch_y):
