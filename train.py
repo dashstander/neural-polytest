@@ -114,6 +114,8 @@ if __name__ == '__main__':
     embed_dimension = 128
     poly_dimension = 256
     model_dimension = 1024
+
+    train_lr = 1.0e-3
     #####################################
 
     wandb.init(
@@ -126,6 +128,7 @@ if __name__ == '__main__':
             "poly_dim": poly_dimension,
             "model_dim": model_dimension,
             "train_split": train_pcnt,
+            "lr": train_lr
         }
     )
 
@@ -158,7 +161,7 @@ if __name__ == '__main__':
     key = jax.random.PRNGKey(seed)
     key, model_key = jax.random.split(key)
     model = PolynomialMultiplicationMLP(p, embed_dimension, poly_dimension, model_dimension, key=model_key)
-    optimizer = optax.adam(learning_rate=1e-4)
+    optimizer = optax.adam(learning_rate=train_lr)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
 
     # Replicate model and optimizer state across devices
