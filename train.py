@@ -7,6 +7,8 @@ import optax
 from tqdm.auto import tqdm
 import wandb
 
+import jax.tree_util as jtu
+
 from neural_polytest.finite_fields import PyGFPolynomial
 from neural_polytest.layers import PolynomialTransformerEncoder
 
@@ -49,6 +51,8 @@ def train_step(model, opt_state, batch_x, batch_y):
     loss_val, grads = eqx.filter_value_and_grad(compute_loss)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
+    print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
+    print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_model = eqx.apply_updates(model, updates)
     return new_model, new_opt_state, loss_val
@@ -180,6 +184,7 @@ if __name__ == '__main__':
         batch_size, n_devices, data_keys[2]
     )
     test_iter = test_iterator(data_keys[3])
+
 
     for epoch in tqdm(range(n_epochs)):
         model, opt_state, train_loss = train_epoch(model, opt_state, train_iter, steps_per_epoch)
