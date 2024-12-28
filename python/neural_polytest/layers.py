@@ -172,7 +172,7 @@ class TransformerEncoderLayer(eqx.Module):
             key_size=d_model,
             value_size=d_model,
             key=attention_key,
-            dropout_p=0.0
+            inference=None
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
         self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
