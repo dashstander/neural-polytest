@@ -156,6 +156,111 @@ class PolynomialMultiplicationMLP(eqx.Module):
         logits = self.unembed(jax.nn.relu(activations))
         
         return PolynomialPredictions(logits)
+    
+
+class TransformerEncoderLayer(eqx.Module):
+    """Single transformer encoder layer with self-attention and feedforward."""
+    attention: eqx.nn.MultiheadAttention
+    ff_linear_up: eqx.nn.Linear
+    ff_linear_down: eqx.nn.Linear
+
+    def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
+        attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
+        self.attention = eqx.nn.MultiheadAttention(
+            num_heads=n_heads,
+            query_size=d_model,
+            key_size=d_model,
+            value_size=d_model,
+            key=attention_key,
+        )
+        self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
+        self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
+
+    def __call__(self, x):
+        
+        # Self attention
+        attention_out = self.attention(x, x, x)
+  
+        x = x + attention_out
+        
+        # Feedforward block
+        ff_out = jax.vmap(self.ff_linear_up)(x)
+        ff_out = jax.nn.relu(ff_out)
+        ff_out = jax.vmap(self.ff_linear_down)(ff_out)
+        x = x + ff_out
+        
+        return x
+
+
+class PolynomialTransformerEncoder(eqx.Module):
+    """Transformer encoder for polynomial multiplication."""
+    embedding: eqx.nn.Embedding
+    pos_embedding: jnp.ndarray
+    encoder_layer: TransformerEncoderLayer
+    output_proj: eqx.nn.Linear
+    p: int
+    sequence_weights: eqx.nn.Linear
+
+    def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, *, key):
+        self.p = p
+        seq_len = 2*p + 1  # left coeffs + sep + right coeffs
+        vocab_size = p + 1  # field elements + sep token
+        
+        keys = jax.random.split(key, 4)
+        
+        # Token embedding
+        self.embedding = eqx.nn.Embedding(
+            num_embeddings=vocab_size,
+            embedding_size=d_model,
+            key=keys[0]
+        )
+        
+        # Learned positional embedding
+        self.pos_embedding = jax.random.normal(keys[1], (seq_len, d_model)) * 0.02
+        
+        # Transformer layer
+        self.encoder_layer = TransformerEncoderLayer(
+            d_model=d_model,
+            n_heads=n_heads,
+            d_ff=d_ff,
+            key=keys[2]
+        )
+        self.sequence_weights = eqx.nn.Linear(
+            seq_len,
+            1,
+            key=keys[3]
+        )
+                
+        self.output_proj = eqx.nn.Linear(
+            d_model,
+            p * p,  # output logits for each coefficient
+            key=keys[4]
+        )
+
+    def __call__(self, left_poly, right_poly):
+        # Create input sequence [left_coeffs, sep, right_coeffs]
+        batch_size = left_poly.shape[0]
+        sep_token = jnp.full((batch_size, 1), self.p)  # p is our sep token index
+        x = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
+        
+        # Embed tokens and add positional embedding
+        x = jax.vmap(jax.vmap(self.embedding))(x)
+        x = x + self.pos_embedding
+        
+        # Apply transformer layer
+        x = jax.vmap(self.encoder_layer)(x)
+        
+        # Learned weighted averaging over sequence length instead of mean
+        # x shape is (batch, seq_len, d_model)
+        #x = jnp.swapaxes(x, 1, 2)  # -> (batch, d_model, seq_len)
+        x = jax.vmap(self.sequence_weights)(x)  # -> (batch, d_model)
+        x = x.squeeze(1)  # -> (batch, d_model)
+        
+        # Project to output logits
+        logits = jax.vmap(self.output_proj)(x)
+        logits = logits.reshape(batch_size, self.p, self.p)
+        
+        return logits
 
 
 @dataclass

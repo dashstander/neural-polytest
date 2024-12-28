@@ -8,7 +8,7 @@ from tqdm.auto import tqdm
 import wandb
 
 from neural_polytest.finite_fields import PyGFPolynomial
-from neural_polytest.layers import PolynomialMultiplicationMLP
+from neural_polytest.layers import PolynomialTransformerEncoder
 
 
 def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
@@ -111,9 +111,10 @@ if __name__ == '__main__':
     train_pcnt = 0.95
     batch_size = 2 ** 15
 
-    embed_dimension = 128
-    poly_dimension = 256
-    model_dimension = 2048
+    embed_dimension = 256
+    model_dimension = 512
+    ff_up_dimension = 2048
+    n_heads = 2
 
     train_lr = 1.0e-3
     #####################################
@@ -125,8 +126,9 @@ if __name__ == '__main__':
             "epochs": n_epochs,
             "batch_size": batch_size,
             "embed_dim": embed_dimension,
-            "poly_dim": poly_dimension,
             "model_dim": model_dimension,
+            "ff_dim": ff_up_dimension,
+            'n_heads': n_heads,
             "train_split": train_pcnt,
             "lr": train_lr
         }
@@ -160,7 +162,7 @@ if __name__ == '__main__':
     # Initialize model and optimizer
     key = jax.random.PRNGKey(seed)
     key, model_key = jax.random.split(key)
-    model = PolynomialMultiplicationMLP(p, embed_dimension, poly_dimension, model_dimension, key=model_key)
+    model = PolynomialTransformerEncoder(p, embed_dimension, model_dimension, n_heads, ff_up_dimension, key=model_key)
     optimizer = optax.adam(learning_rate=train_lr)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
 
