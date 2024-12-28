@@ -260,7 +260,7 @@ class PolynomialTransformerEncoder(eqx.Module):
         logits = jax.vmap(self.output_proj)(x)
         logits = logits.reshape(batch_size, p, p)
         
-        return logits
+        return PolynomialPredictions(logits)
 
 
 @dataclass
@@ -268,7 +268,7 @@ class PolynomialPredictions:
     """Predictions for polynomial coefficients over a finite field.
     
     Attributes:
-        logits: Array of shape (batch, degree+1, p) containing raw logits
+        logits: Array of shape (batch, p, p) containing raw logits
                logits[b, i, j] is the logit for coefficient i being value j
                in polynomial b of the batch
     """
