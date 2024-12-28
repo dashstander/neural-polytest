@@ -223,6 +223,7 @@ class PolynomialTransformerEncoder(eqx.Module):
             d_model=d_model,
             n_heads=n_heads,
             d_ff=d_ff,
+            inference=False,
             key=keys[2]
         )
         self.sequence_weights = eqx.nn.Linear(
