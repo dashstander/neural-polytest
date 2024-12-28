@@ -54,7 +54,7 @@ def train_step(model, opt_state, batch_x, batch_y):
     return new_model, new_opt_state, loss_val
 
 
-@partial(jax.pmap, axis_name='batch')
+@partial(eqx.filter_pmap, axis_name='batch')
 def eval_step(model, batch_x, batch_y):
     #pred = model(batch_x_left, batch_x_right)
     #predictions = pred.get_predictions()
