@@ -36,9 +36,9 @@ def compute_loss(model, batch_x, batch_y):
     x_left, x_right = batch_x
     pred = model(x_left, x_right)
     # Convert integer labels to one-hot
-    targets = jax.nn.one_hot(batch_y.reshape(-1), num_classes=pred.field_size)
+    targets = jax.nn.one_hot(batch_y.reshape(-1), num_classes=model.p)
     per_example_loss = optax.softmax_cross_entropy(
-        pred.logits.reshape(-1, pred.field_size),
+        pred.reshape(-1, model.p),
         targets
     )
     return jnp.mean(per_example_loss)

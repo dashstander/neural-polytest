@@ -171,7 +171,6 @@ class TransformerEncoderLayer(eqx.Module):
             query_size=d_model,
             key_size=d_model,
             value_size=d_model,
-            inference=False,
             key=attention_key,
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
@@ -180,7 +179,7 @@ class TransformerEncoderLayer(eqx.Module):
     def __call__(self, x):
         
         # Self attention
-        attention_out = self.attention(x, x, x)
+        attention_out = self.attention(x, x, x, inference=True)
   
         x = x + attention_out
         
