@@ -110,8 +110,6 @@ if __name__ == '__main__':
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 15
-
-    embed_dimension = 256
     model_dimension = 512
     ff_up_dimension = 2048
     n_heads = 2
@@ -125,7 +123,6 @@ if __name__ == '__main__':
             "field_size": p,
             "epochs": n_epochs,
             "batch_size": batch_size,
-            "embed_dim": embed_dimension,
             "model_dim": model_dimension,
             "ff_dim": ff_up_dimension,
             'n_heads': n_heads,
@@ -162,7 +159,7 @@ if __name__ == '__main__':
     # Initialize model and optimizer
     key = jax.random.PRNGKey(seed)
     key, model_key = jax.random.split(key)
-    model = PolynomialTransformerEncoder(p, embed_dimension, model_dimension, n_heads, ff_up_dimension, key=model_key)
+    model = PolynomialTransformerEncoder(p, model_dimension, n_heads, ff_up_dimension, key=model_key)
     optimizer = optax.adam(learning_rate=train_lr)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
 
