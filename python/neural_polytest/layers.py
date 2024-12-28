@@ -239,7 +239,7 @@ class PolynomialTransformerEncoder(eqx.Module):
 
     def __call__(self, left_poly, right_poly):
         # Create input sequence [left_coeffs, sep, right_coeffs]
-        batch_size = left_poly.shape[0]
+        batch_size, p = left_poly.shape
         sep_token = jnp.full((batch_size, 1), self.p)  # p is our sep token index
         x = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
         
@@ -258,7 +258,7 @@ class PolynomialTransformerEncoder(eqx.Module):
         
         # Project to output logits
         logits = jax.vmap(self.output_proj)(x)
-        logits = logits.reshape(batch_size, self.p, self.p)
+        logits = logits.reshape(batch_size, p, p)
         
         return logits
 
