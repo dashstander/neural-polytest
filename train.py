@@ -51,8 +51,8 @@ def train_step(model, opt_state, batch_x, batch_y):
     loss_val, grads = eqx.filter_value_and_grad(compute_loss)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
-    print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
-    print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
+    #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
+    #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_model = eqx.apply_updates(model, updates)
     return new_model, new_opt_state, loss_val
@@ -165,7 +165,7 @@ if __name__ == '__main__':
     key, model_key = jax.random.split(key)
     model = PolynomialTransformerEncoder(p, model_dimension, n_heads, ff_up_dimension, key=model_key)
     optimizer = optax.adam(learning_rate=train_lr)
-    opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
+    opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     # Replicate model and optimizer state across devices
     model = jax.device_put_replicated(model, jax.devices())
