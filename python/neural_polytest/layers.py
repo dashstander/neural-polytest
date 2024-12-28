@@ -240,7 +240,7 @@ class PolynomialTransformerEncoder(eqx.Module):
 
     def __call__(self, left_poly, right_poly):
         # Create input sequence [left_coeffs, sep, right_coeffs]
-        batch_size, p, _ = left_poly.shape
+        batch_size, p = left_poly.shape
         sep_token = jnp.full((batch_size, 1), self.p)  # p is our sep token index
         x = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
         
