@@ -171,6 +171,7 @@ class TransformerEncoderLayer(eqx.Module):
             query_size=d_model,
             key_size=d_model,
             value_size=d_model,
+            inference=False,
             key=attention_key,
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
@@ -223,7 +224,6 @@ class PolynomialTransformerEncoder(eqx.Module):
             d_model=d_model,
             n_heads=n_heads,
             d_ff=d_ff,
-            inference=False,
             key=keys[2]
         )
         self.sequence_weights = eqx.nn.Linear(
