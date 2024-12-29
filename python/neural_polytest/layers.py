@@ -1,8 +1,185 @@
 from dataclasses import dataclass
+
 import math
+from typing import cast, Optional, Union, Callable
+from functools import partial
+
 import jax
 import jax.numpy as jnp
+
 import equinox as eqx
+from equinox.nn import Linear
+
+
+
+def dot_product_attention_weights(
+    query,
+    key,
+    mask = None,
+):
+    query = query / math.sqrt(query.shape[-1])
+    logits = jnp.einsum("sd,Sd->sS", query, key)
+    if mask is not None:
+        if mask.shape != logits.shape:
+            raise ValueError(
+                f"mask must have shape (query_seq_length, "
+                f"kv_seq_length)=({query.shape[0]}, "
+                f"{key.shape[0]}). Got {mask.shape}."
+            )
+        logits = jnp.where(mask, logits, jnp.finfo(logits.dtype).min)
+
+    with jax.numpy_dtype_promotion("standard"):
+        dtype = jnp.result_type(logits.dtype, jnp.float32)
+    weights = jax.nn.softmax(logits.astype(dtype)).astype(logits.dtype)
+    return weights
+
+
+def dot_product_attention(query, key_, value, mask):
+    weights = dot_product_attention_weights(query, key_, mask)
+    attn = jnp.einsum("sS,Sd->sd", weights, value)
+    return attn
+
+
+class MultiheadAttention(eqx.Module):
+    query_proj: eqx.nn.Linear
+    key_proj: eqx.nn.Linear
+    value_proj: eqx.nn.Linear
+    output_proj: eqx.nn.Linear
+
+    num_heads: int = eqx.field(static=True)
+    query_size: int = eqx.field(static=True)
+    key_size: int = eqx.field(static=True)
+    value_size: int = eqx.field(static=True)
+    output_size: int = eqx.field(static=True)
+    qk_size: int = eqx.field(static=True)
+    vo_size: int = eqx.field(static=True)
+    use_query_bias: bool = eqx.field(static=True)
+    use_key_bias: bool = eqx.field(static=True)
+    use_value_bias: bool = eqx.field(static=True)
+    use_output_bias: bool = eqx.field(static=True)
+
+    def __init__(
+        self,
+        num_heads: int,
+        query_size: int,
+        key_size: Optional[int] = None,
+        value_size: Optional[int] = None,
+        output_size: Optional[int] = None,
+        qk_size: Optional[int] = None,
+        vo_size: Optional[int] = None,
+        use_query_bias: bool = False,
+        use_key_bias: bool = False,
+        use_value_bias: bool = False,
+        use_output_bias: bool = False,
+        dtype=None,
+        *,
+        key,
+    ):
+        dtype = jnp.float32 if dtype is None else dtype  # Default to float32 if not specified
+        qkey, kkey, vkey, okey = jax.random.split(key, 4)
+
+        if key_size is None:
+            key_size = query_size
+        if value_size is None:
+            value_size = query_size
+        if qk_size is None:
+            qk_size = query_size // num_heads
+        if vo_size is None:
+            vo_size = query_size // num_heads
+        if output_size is None:
+            output_size = query_size
+
+        self.query_proj = Linear(
+            query_size,
+            num_heads * qk_size,
+            use_bias=use_query_bias,
+            dtype=dtype,
+            key=qkey,
+        )
+        self.key_proj = Linear(
+            key_size, num_heads * qk_size, use_bias=use_key_bias, dtype=dtype, key=kkey
+        )
+        self.value_proj = Linear(
+            value_size,
+            num_heads * vo_size,
+            use_bias=use_value_bias,
+            dtype=dtype,
+            key=vkey,
+        )
+        self.output_proj = Linear(
+            num_heads * vo_size,
+            output_size,
+            use_bias=use_output_bias,
+            dtype=dtype,
+            key=okey,
+        )
+
+        self.num_heads = num_heads
+        self.query_size = query_size
+        self.key_size = key_size
+        self.value_size = value_size
+        self.output_size = output_size
+        self.qk_size = qk_size
+        self.vo_size = vo_size
+        self.use_query_bias = use_query_bias
+        self.use_key_bias = use_key_bias
+        self.use_value_bias = use_value_bias
+        self.use_output_bias = use_output_bias
+
+    def __call__(
+        self,
+        query,
+        key_,
+        value,
+        mask: None,
+        process_heads = None,
+    ):
+        query_seq_length, _ = query.shape
+        kv_seq_length, _ = key_.shape
+        kv_seq_length2, _ = value.shape
+        if kv_seq_length != kv_seq_length2:
+            raise ValueError("key and value must both be sequences of equal length.")
+
+        query_heads = self._project(self.query_proj, query)
+        key_heads = self._project(self.key_proj, key_)
+        value_heads = self._project(self.value_proj, value)
+
+        if process_heads is not None:
+            q_shape, k_shape, v_shape = (
+                query_heads.shape,
+                key_heads.shape,
+                value_heads.shape,
+            )
+            query_heads, key_heads, value_heads = process_heads(
+                query_heads, key_heads, value_heads
+            )
+
+            if (
+                query_heads.shape != q_shape
+                or key_heads.shape != k_shape
+                or value_heads.shape != v_shape
+            ):
+                raise ValueError(
+                    "process_heads must not change the shape of the heads."
+                )
+
+        if mask is not None and mask.ndim == 3:
+            attn = jax.vmap(dot_product_attention, in_axes=1, out_axes=1)(
+                query_heads, key_heads, value_heads, mask=mask
+            )
+        else:
+            attn = jax.vmap(partial(dot_product_attention, mask=mask), in_axes=1, out_axes=1)(
+                query_heads, key_heads, value_heads
+            )
+        attn = attn.reshape(query_seq_length, -1)
+
+        return jax.vmap(self.output_proj)(attn)
+
+    def _project(self, proj, x):
+        seq_length, _ = x.shape
+        projection = jax.vmap(proj)(x)
+        return projection.reshape(seq_length, self.num_heads, -1)
+    
 
 
 class FieldEmbed(eqx.Module):
@@ -162,138 +339,20 @@ class PolynomialMultiplicationMLP(eqx.Module):
         logits = jax.vmap(self.unembed)(jax.nn.relu(jax.nn.relu(activations)))
         
         return PolynomialPredictions(logits.reshape(-1, p, p))
-    
-
-class TransformerEncoderLayer(eqx.Module):
-    """Single transformer encoder layer with self-attention and feedforward."""
-    attention: eqx.nn.MultiheadAttention
-    ff_linear_up: eqx.nn.Linear
-    ff_linear_down: eqx.nn.Linear
-
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
-        attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
-        self.attention = eqx.nn.MultiheadAttention(
-            num_heads=n_heads,
-            query_size=d_model,
-            key_size=d_model,
-            value_size=d_model,
-            key=attention_key,
-            inference=None,
-            dropout_p=None
-        )
-        self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
-        self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
-
-    def __call__(self, x):
-        
-        # Self attention
-        attention_out = self.attention(x, x, x, inference=True)
-  
-        #x = x + attention_out
-        
-        # Feedforward block
-        ff_out = jax.vmap(self.ff_linear_up)(attention_out)
-        ff_out = jax.nn.relu(ff_out)
-        ff_out = jax.vmap(self.ff_linear_down)(ff_out)
-        #x = x + ff_out
-        
-        return attention_out
-
-
-class PolynomialTransformerEncoder(eqx.Module):
-    """Transformer encoder for polynomial multiplication."""
-    embedding: eqx.nn.Embedding
-    pos_embedding: jnp.ndarray
-    encoder_layer0: TransformerEncoderLayer
-    encoder_layer1: TransformerEncoderLayer
-    output_proj: eqx.nn.Linear
-    p: int
-    sequence_weights: eqx.nn.Linear
-
-    def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, *, key):
-        self.p = p
-        seq_len = 2*p + 1  # left coeffs + sep + right coeffs
-        vocab_size = p + 1  # field elements + sep token
-        
-        keys = jax.random.split(key, 5)
-        
-        # Token embedding
-        self.embedding = eqx.nn.Embedding(
-            num_embeddings=vocab_size,
-            embedding_size=d_model,
-            key=keys[0]
-        )
-        
-        # Learned positional embedding
-        self.pos_embedding = jax.random.normal(keys[1], (seq_len, d_model)) * 0.02
-        
-        # Transformer layer
-        self.encoder_layer0 = TransformerEncoderLayer(
-            d_model=d_model,
-            n_heads=n_heads,
-            d_ff=d_ff,
-            key=keys[1]
-        )
-        self.encoder_layer1 = TransformerEncoderLayer(
-            d_model=d_model,
-            n_heads=n_heads,
-            d_ff=d_ff,
-            key=keys[2]
-        )
-        self.sequence_weights = eqx.nn.Linear(
-            seq_len,
-            1,
-            key=keys[3]
-        )
-                
-        self.output_proj = eqx.nn.Linear(
-            d_model,
-            p * p,  # output logits for each coefficient
-            key=keys[4]
-        )
-
-    def __call__(self, left_poly, right_poly):
-        # Create input sequence [left_coeffs, sep, right_coeffs]
-        batch_size, p = left_poly.shape
-        sep_token = jnp.full((batch_size, 1), self.p)  # p is our sep token index
-        x = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
-        
-        # Embed tokens and add positional embedding
-        x = jax.vmap(jax.vmap(self.embedding))(x)
-        x = x + self.pos_embedding
-        
-        # Apply transformer layer
-        x = jax.vmap(self.encoder_layer0)(x)
-        x = jax.vmap(self.encoder_layer1)(x)
-        
-        # Learned weighted averaging over sequence length instead of mean
-        # x shape is (batch, seq_len, d_model)
-        #x = jnp.swapaxes(x, 1, 2)  # -> (batch, d_model, seq_len)
-        x = jax.vmap(self.sequence_weights)(x)  # -> (batch, d_model)
-        x = x.squeeze(1)  # -> (batch, d_model)
-        
-        # Project to output logits
-        logits = jax.vmap(self.output_proj)(x)
-        logits = logits.reshape(batch_size, p, p)
-        
-        return PolynomialPredictions(logits)
-    
 
 
 class EncoderLayer(eqx.Module):
-    attention: eqx.nn.MultiheadAttention
+    attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
-        self.attention = eqx.nn.MultiheadAttention(
+        self.attention = MultiheadAttention(
             num_heads=n_heads,
             query_size=d_model,
             key_size=d_model,
             value_size=d_model,
-            dropout_p=None,
-            inference=None,
             key=attention_key,
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
@@ -310,29 +369,25 @@ class EncoderLayer(eqx.Module):
         return x
 
 class DecoderLayer(eqx.Module):
-    self_attention: eqx.nn.MultiheadAttention
-    cross_attention: eqx.nn.MultiheadAttention
+    self_attention: MultiheadAttention
+    cross_attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         keys = jax.random.split(key, 4)
-        self.self_attention = eqx.nn.MultiheadAttention(
+        self.self_attention = MultiheadAttention(
             num_heads=n_heads,
             query_size=d_model,
             key_size=d_model,
             value_size=d_model,
-            dropout_p=None,
-            inference=None,
             key=keys[0],
         )
-        self.cross_attention = eqx.nn.MultiheadAttention(
+        self.cross_attention = MultiheadAttention(
             num_heads=n_heads,
             query_size=d_model,
             key_size=d_model,
             value_size=d_model,
-            dropout_p=None,
-            inference=None,
             key=keys[1],
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=keys[2])
@@ -412,7 +467,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         # Project to logits
         logits = jax.vmap(self.output_proj)(decoder_output)
         
-        return PolynomialPredictions(logits.reshape(-1, p, p))
+        return logits
 
 
 @dataclass

@@ -39,17 +39,17 @@ def compute_loss(model, batch_x, batch_y):
     # Shape is (batch, p)
     targets = batch_y
     
-    # One-hot encode targets
+    # One-hot encode targets, (batch, p, p)
     targets_one_hot = jax.nn.one_hot(targets, num_classes=p)
     
     # Compute per-coefficient cross entropy
-    per_coeff_loss = optax.softmax_cross_entropy(
-        pred.logits,
+    per_example_loss = optax.softmax_cross_entropy(
+        pred,
         targets_one_hot
     )
     
     # Average over batch but keep coefficient dimension
-    coeff_losses = jnp.mean(per_coeff_loss, axis=0)
+    coeff_losses = jnp.mean(per_example_loss, axis=0)
     return jnp.mean(coeff_losses), coeff_losses
 
 
@@ -60,8 +60,6 @@ def train_step(model, opt_state, batch_x, batch_y):
     grads = jax.lax.pmean(grads, axis_name='batch')
     loss = jax.lax.pmean(loss, axis_name='batch')
     coeff_loss = jax.lax.pmean(coeff_loss, axis_name='batch')
-    #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
-    #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_model = eqx.apply_updates(model, updates)
     return new_model, new_opt_state, loss, coeff_loss
@@ -119,7 +117,7 @@ if __name__ == '__main__':
     n_epochs = 1000
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 16
+    batch_size = 2 ** 17
     embed_dimension = 512
     n_heads = 2
     model_dimension = 2048
