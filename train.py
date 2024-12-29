@@ -84,7 +84,7 @@ def train_epoch(model, opt_state, iterator, steps_per_epoch):
         model, opt_state, loss, coeff_losses = train_step(model, opt_state, batch_x, batch_y)
         total_loss += loss
         metrics = {
-            "train/loss": jnp.mean(loss)
+            "loss/train": jnp.mean(loss)
         }
         # Log each coefficient's loss
         for i in range(p):
@@ -202,9 +202,9 @@ if __name__ == '__main__':
             test_loss = eval_step(model, test_x, test_y)
             
             metrics = {
-                "train/loss": train_loss,
+                "loss/epoch": train_loss,
                 #"train/accuracy": train_acc,
-                "test/loss": jnp.mean(test_loss),
+                "loss/test": jnp.mean(test_loss),
                 "epoch": epoch,
             }
             wandb.log(metrics)
