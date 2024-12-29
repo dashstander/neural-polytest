@@ -84,11 +84,11 @@ def train_epoch(model, opt_state, iterator, steps_per_epoch):
         model, opt_state, loss, coeff_losses = train_step(model, opt_state, batch_x, batch_y)
         total_loss += loss
         metrics = {
-            "main_loss": loss
+            "train/loss": jnp.mean(loss)
         }
         # Log each coefficient's loss
         for i in range(p):
-            metrics[f"train/coeff_{i}_loss"] = jnp.mean(coeff_losses[i])
+            metrics[f"coeff_loss/deg{i}"] = jnp.mean(coeff_losses[i])
         wandb.log(metrics)
             
     return model, opt_state, total_loss / steps_per_epoch
