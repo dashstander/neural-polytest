@@ -144,9 +144,9 @@ if __name__ == '__main__':
     model_dimension = 2048
 
     # Training hyperparameters
-    train_lr = 1.0e-3
-    warmup_epochs = 5  # Number of epochs for warmup
-    max_grad_norm = 2.0  # Maximum gradient norm for clipping
+    train_lr = 1.0e-4
+    warmup_epochs = 10  # Number of epochs for warmup
+    max_grad_norm = 1.0  # Maximum gradient norm for clipping
     #####################################
 
     wandb.init(
