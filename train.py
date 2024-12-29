@@ -7,8 +7,6 @@ import optax
 from tqdm.auto import tqdm
 import wandb
 
-import jax.tree_util as jtu
-
 from neural_polytest.finite_fields import PyGFPolynomial
 from neural_polytest.layers import PolynomialTransformerEncoder
 
@@ -38,8 +36,6 @@ def compute_loss(model, batch_x, batch_y):
     x_left, x_right = batch_x
     pred = model(x_left, x_right)
     
-    # Shape is (batch, p, p)
-    logits = pred.reshape(-1, pred.shape[-2], pred.shape[-1])
     # Shape is (batch, p)
     targets = batch_y
     
@@ -48,7 +44,7 @@ def compute_loss(model, batch_x, batch_y):
     
     # Compute per-coefficient cross entropy
     per_coeff_loss = optax.softmax_cross_entropy(
-        logits,
+        pred.logits,
         targets_one_hot
     )
     
