@@ -84,7 +84,7 @@ def train_epoch(model, opt_state, iterator, steps_per_epoch):
         model, opt_state, loss, coeff_losses = train_step(model, opt_state, batch_x, batch_y)
         total_loss += loss
         metrics = {
-            "train/loss": loss
+            "main_loss": loss
         }
         # Log each coefficient's loss
         for i in range(p):
