@@ -464,7 +464,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         decoder_output = jax.vmap(self.decoder_layer)(decoder_x, encoder_output)
         
         # Project to logits
-        logits = jax.vmap(self.output_proj)(decoder_output)
+        logits = jax.vmap(self.output_proj)(jax.lax.transpose(decoder_output, (0, 2, 1)))
         
         return logits
 
