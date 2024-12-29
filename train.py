@@ -29,6 +29,26 @@ def create_optimizer(train_lr: float, warmup_steps: int, max_grad_norm: float):
     return optimizer
 
 
+def compute_logit_entropy(logits):
+    """Compute average entropy of the logit distributions"""
+    probs = jax.nn.softmax(logits, axis=-1)
+    # Avoid log(0) by adding small epsilon
+    eps = 1e-10
+    entropy = -jnp.sum(probs * jnp.log(probs + eps), axis=-1)
+    return jnp.mean(entropy)
+
+
+def save_checkpoint(model, save_path="checkpoint.eqx"):
+    """Save the latest model checkpoint, overwriting previous one"""
+    model_state = jax.device_get(model)  # Get from accelerator
+    eqx.tree_serialise_leaves(save_path, model_state)
+
+
+def load_checkpoint(model_template, load_path="checkpoint.eqx"):
+    """Load the latest checkpoint"""
+    return eqx.tree_deserialise_leaves(load_path, model_template)
+
+
 def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
     """Create batches suitable for TPU training"""
     dataset_size = len(X_left)
@@ -61,39 +81,46 @@ def compute_loss(model, batch_x, batch_y):
         targets_one_hot
     )
     
+    # Compute entropy of predictions
+    avg_entropy = compute_logit_entropy(pred)
+    
     coeff_losses = jnp.mean(per_example_loss, axis=0)
-    return jnp.mean(coeff_losses), coeff_losses
+    return jnp.mean(coeff_losses), (coeff_losses, avg_entropy)
 
 
 @partial(jax.pmap, axis_name='batch')
 def train_step(model, opt_state, batch_x, batch_y):
-    (loss, coeff_loss), grads = eqx.filter_value_and_grad(compute_loss, has_aux=True)(model, batch_x, batch_y)
+    (loss, (coeff_loss, entropy)), grads = eqx.filter_value_and_grad(compute_loss, has_aux=True)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
     loss = jax.lax.pmean(loss, axis_name='batch')
     coeff_loss = jax.lax.pmean(coeff_loss, axis_name='batch')
+    entropy = jax.lax.pmean(entropy, axis_name='batch')
     updates, new_opt_state = optimizer.update(grads, opt_state, params=eqx.filter(model, eqx.is_inexact_array))
     new_model = eqx.apply_updates(model, updates)
-    return new_model, new_opt_state, loss, coeff_loss
+    return new_model, new_opt_state, loss, coeff_loss, entropy
 
 
 @partial(eqx.filter_pmap, axis_name='batch')
 def eval_step(model, batch_x, batch_y):
-    loss, _ = compute_loss(model, batch_x, batch_y)
-    return jax.lax.pmean(loss, axis_name='batch')
+    loss, (_, entropy) = compute_loss(model, batch_x, batch_y)
+    return jax.lax.pmean(loss, axis_name='batch'), jax.lax.pmean(entropy, axis_name='batch')
 
 
 def train_epoch(model, opt_state, iterator, steps_per_epoch):
     total_loss = 0
+    total_entropy = 0
     
     for _ in range(steps_per_epoch):
         batch_x, batch_y = next(iterator)
-        model, opt_state, loss, coeff_losses = train_step(
+        model, opt_state, loss, coeff_losses, entropy = train_step(
             model, opt_state, batch_x, batch_y
         )
         total_loss += loss
+        total_entropy += entropy
         metrics = {
             "loss/train": jnp.mean(loss),
+            "logit_entropy": jnp.mean(entropy)
         }
         # Log each coefficient's loss
         for i in range(p):
@@ -196,15 +223,22 @@ if __name__ == '__main__':
         model, opt_state, train_loss = train_epoch(
             model, opt_state, train_iter, steps_per_epoch
         )
+        
         if epoch % 1 == 0:
+            # Evaluate on a single batch
             test_x, test_y = next(test_iter)
-            test_loss = eval_step(model, test_x, test_y)
+            test_loss, test_entropy = eval_step(model, test_x, test_y)
             
             metrics = {
                 "loss/epoch": train_loss,
                 "loss/test": jnp.mean(test_loss),
+                "test_entropy": jnp.mean(test_entropy),
                 "epoch": epoch,
             }
             wandb.log(metrics)
+        
+        # Save checkpoint every other epoch
+        if epoch % 2 == 0:
+            save_checkpoint(model)
 
     wandb.finish()
