@@ -37,25 +37,36 @@ def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
 def compute_loss(model, batch_x, batch_y):
     x_left, x_right = batch_x
     pred = model(x_left, x_right)
-    # Convert integer labels to one-hot
-    targets = jax.nn.one_hot(batch_y.reshape(-1), num_classes=pred.field_size)
-    per_example_loss = optax.softmax_cross_entropy(
-        pred.logits.reshape(-1, pred.field_size),
-        targets
+    
+    # Shape is (batch, p, p)
+    logits = pred.reshape(-1, pred.shape[-2], pred.shape[-1])
+    # Shape is (batch, p)
+    targets = batch_y
+    
+    # One-hot encode targets
+    targets_one_hot = jax.nn.one_hot(targets, num_classes=p)
+    
+    # Compute per-coefficient cross entropy
+    per_coeff_loss = optax.softmax_cross_entropy(
+        logits,
+        targets_one_hot
     )
-    return jnp.mean(per_example_loss)
+    
+    # Average over batch but keep coefficient dimension
+    coeff_losses = jnp.mean(per_coeff_loss, axis=0)
+    return jnp.mean(coeff_losses), coeff_losses
 
 
 @partial(jax.pmap, axis_name='batch')
 def train_step(model, opt_state, batch_x, batch_y):
-    loss_val, grads = eqx.filter_value_and_grad(compute_loss)(model, batch_x, batch_y)
+    (loss, coeff_loss), grads = eqx.filter_value_and_grad(compute_loss, has_aux=True)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
     #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
     #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
     updates, new_opt_state = optimizer.update(grads, opt_state)
     new_model = eqx.apply_updates(model, updates)
-    return new_model, new_opt_state, loss_val
+    return new_model, new_opt_state, loss, coeff_loss
 
 
 @partial(eqx.filter_pmap, axis_name='batch')
@@ -63,28 +74,25 @@ def eval_step(model, batch_x, batch_y):
     #pred = model(batch_x_left, batch_x_right)
     #predictions = pred.get_predictions()
     #correct = (predictions == batch_y).all(axis=-1).mean()
-    loss = compute_loss(model, batch_x, batch_y)
+    loss, coeff_loss = compute_loss(model, batch_x, batch_y)
     return jax.lax.pmean(loss, axis_name='batch')
 
 
-def train_epoch(model, opt_state, iterator, steps_per_epoch, log_every=5):
+def train_epoch(model, opt_state, iterator, steps_per_epoch):
     total_loss = 0
-    running_loss = 0
     
-    for step in range(steps_per_epoch):
+    for _ in range(steps_per_epoch):
         batch_x, batch_y = next(iterator)
-        model, opt_state, loss = train_step(model, opt_state, batch_x, batch_y)
-        step_loss = loss.mean()
-        total_loss += step_loss
-        running_loss += step_loss
-        
-        if (step + 1) % log_every == 0:
-            wandb.log({
-                "train/step_loss": running_loss / log_every,
-                "step": step + 1,
-            })
-            running_loss = 0
-        
+        model, opt_state, (loss, coeff_losses) = train_step(model, opt_state, batch_x, batch_y)
+        total_loss += loss
+        metrics = {
+            "train/loss": loss
+        }
+        # Log each coefficient's loss
+        for i in range(p):
+            metrics[f"train/coeff_{i}_loss"] = coeff_losses[i]
+        wandb.log(metrics)
+            
     return model, opt_state, total_loss / steps_per_epoch
 
 
