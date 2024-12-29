@@ -183,15 +183,15 @@ class TransformerEncoderLayer(eqx.Module):
         # Self attention
         attention_out = self.attention(x, x, x, inference=True)
   
-        x = x + attention_out
+        #x = x + attention_out
         
         # Feedforward block
-        ff_out = jax.vmap(self.ff_linear_up)(x)
+        ff_out = jax.vmap(self.ff_linear_up)(attention_out)
         ff_out = jax.nn.relu(ff_out)
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
-        x = x + ff_out
+        #x = x + ff_out
         
-        return x
+        return attention_out
 
 
 class PolynomialTransformerEncoder(eqx.Module):
