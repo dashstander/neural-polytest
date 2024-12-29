@@ -114,7 +114,8 @@ class PolynomialMultiplicationMLP(eqx.Module):
     poly_encode: PolyEncoder
     linear0: eqx.nn.Linear
     linear1: eqx.nn.Linear
-    unembed: PolynomialUnembed
+    linear2: eqx.nn.Linear
+    unembed: eqx.nn.Linear
 
     def __init__(self, p: int, embed_dim: int, poly_dim: int, model_dim: int, *, key):
         super().__init__()
@@ -123,12 +124,13 @@ class PolynomialMultiplicationMLP(eqx.Module):
         self.poly_dim = poly_dim
         self.model_dim = model_dim
 
-        keys = jax.random.split(key, 5)
+        keys = jax.random.split(key, 6)
         self.field_embed = FieldEmbed(p, embed_dim, key=keys[0])
         self.poly_encode = PolyEncoder(p, embed_dim, poly_dim, key=keys[1])
         self.linear0 = eqx.nn.Linear(2 * poly_dim, model_dim, key=keys[2])
         self.linear1 = eqx.nn.Linear(model_dim, model_dim, key=keys[3])
-        self.unembed = PolynomialUnembed(p, model_dim, key=keys[4])
+        self.linear2 = eqx.nn.Linear(model_dim, model_dim, key=keys[4])
+        self.unembed = eqx.nn.Linear(model_dim, p**2, key=keys[5])
 
     def __call__(self, poly_x, poly_y):
         """Computes product of two polynomials.
@@ -144,6 +146,8 @@ class PolynomialMultiplicationMLP(eqx.Module):
         if poly_x.ndim == 1:
             poly_x = poly_x[None, :]
             poly_y = poly_y[None, :]
+
+        _, p = poly_x.shape
             
         embed_x = self.field_embed(poly_x)
         embed_y = self.field_embed(poly_y)
@@ -153,9 +157,11 @@ class PolynomialMultiplicationMLP(eqx.Module):
         xy_encoding = jnp.concatenate([x_enc, y_enc], axis=1)
 
         activations = jax.vmap(self.linear0)(xy_encoding)
-        logits = self.unembed(jax.nn.relu(activations))
+        activations = jax.vmap(self.linear1)(jax.nn.relu(activations))
+        activations = jax.vmap(self.linear2)(jax.nn.relu(activations))
+        logits = self.unembed(jax.nn.relu(jax.nn.relu(activations)))
         
-        return PolynomialPredictions(logits)
+        return PolynomialPredictions(logits.reshape(-1, p, p))
     
 
 class TransformerEncoderLayer(eqx.Module):
