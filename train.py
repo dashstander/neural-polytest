@@ -207,6 +207,6 @@ if __name__ == '__main__':
             }
             wandb.log(metrics)
             
-            print(f"Epoch {epoch}: Loss = {train_loss:.4f}")
+            #print(f"Epoch {epoch}: Loss = {train_loss:.4f}")
 
     wandb.finish()
