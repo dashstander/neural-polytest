@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 
 import math
-from typing import cast, Optional, Union, Callable
+from typing import Optional
 from functools import partial
 
 import jax
 import jax.numpy as jnp
 
 import equinox as eqx
-from equinox.nn import Linear
 
 
 
@@ -89,24 +88,24 @@ class MultiheadAttention(eqx.Module):
         if output_size is None:
             output_size = query_size
 
-        self.query_proj = Linear(
+        self.query_proj = eqx.nn.Linear(
             query_size,
             num_heads * qk_size,
             use_bias=use_query_bias,
             dtype=dtype,
             key=qkey,
         )
-        self.key_proj = Linear(
+        self.key_proj = eqx.nn.Linear(
             key_size, num_heads * qk_size, use_bias=use_key_bias, dtype=dtype, key=kkey
         )
-        self.value_proj = Linear(
+        self.value_proj = eqx.nn.Linear(
             value_size,
             num_heads * vo_size,
             use_bias=use_value_bias,
             dtype=dtype,
             key=vkey,
         )
-        self.output_proj = Linear(
+        self.output_proj = eqx.nn.Linear(
             num_heads * vo_size,
             output_size,
             use_bias=use_output_bias,
@@ -131,7 +130,7 @@ class MultiheadAttention(eqx.Module):
         query,
         key_,
         value,
-        mask: None,
+        mask = None,
         process_heads = None,
     ):
         query_seq_length, _ = query.shape
