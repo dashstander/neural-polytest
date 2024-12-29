@@ -111,7 +111,7 @@ if __name__ == '__main__':
     n_epochs = 1000
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 18
+    batch_size = 2 ** 17
     embed_dimension = 512
     n_heads = 2
     model_dimension = 2048
