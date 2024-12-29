@@ -277,6 +277,142 @@ class PolynomialTransformerEncoder(eqx.Module):
         logits = logits.reshape(batch_size, p, p)
         
         return PolynomialPredictions(logits)
+    
+
+
+class EncoderLayer(eqx.Module):
+    attention: eqx.nn.MultiheadAttention
+    ff_linear_up: eqx.nn.Linear
+    ff_linear_down: eqx.nn.Linear
+
+    def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
+        attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
+        self.attention = eqx.nn.MultiheadAttention(
+            num_heads=n_heads,
+            query_size=d_model,
+            key_size=d_model,
+            value_size=d_model,
+            dropout_p=None,
+            inference=None,
+            key=attention_key,
+        )
+        self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
+        self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
+
+    def __call__(self, x):
+        attention_out = self.attention(x, x, x)
+        x = x + attention_out
+        
+        ff_out = jax.vmap(self.ff_linear_up)(x)
+        ff_out = jax.nn.relu(ff_out)
+        ff_out = jax.vmap(self.ff_linear_down)(ff_out)
+        x = x + ff_out
+        return x
+
+class DecoderLayer(eqx.Module):
+    self_attention: eqx.nn.MultiheadAttention
+    cross_attention: eqx.nn.MultiheadAttention
+    ff_linear_up: eqx.nn.Linear
+    ff_linear_down: eqx.nn.Linear
+
+    def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
+        keys = jax.random.split(key, 4)
+        self.self_attention = eqx.nn.MultiheadAttention(
+            num_heads=n_heads,
+            query_size=d_model,
+            key_size=d_model,
+            value_size=d_model,
+            dropout_p=None,
+            inference=None,
+            key=keys[0],
+        )
+        self.cross_attention = eqx.nn.MultiheadAttention(
+            num_heads=n_heads,
+            query_size=d_model,
+            key_size=d_model,
+            value_size=d_model,
+            dropout_p=None,
+            inference=None,
+            key=keys[1],
+        )
+        self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=keys[2])
+        self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=keys[3])
+
+    def __call__(self, x, encoder_output):
+        # Cross attention to encoder outputs
+        cross_attn = self.cross_attention(x, encoder_output, encoder_output)
+        x = x + cross_attn
+
+        # Self attention
+        self_attn = self.self_attention(x, x, x)
+        x = x + self_attn
+        
+        # Feedforward
+        ff_out = jax.vmap(self.ff_linear_up)(x)
+        ff_out = jax.nn.relu(ff_out)
+        ff_out = jax.vmap(self.ff_linear_down)(ff_out)
+        x = x + ff_out
+        return x
+
+class PolynomialTransformerEncoderDecoder(eqx.Module):
+    embedding: eqx.nn.Embedding
+    pos_embedding_enc: jnp.ndarray
+    pos_embedding_dec: jnp.ndarray
+    encoder_layer: EncoderLayer
+    decoder_layer: DecoderLayer
+    output_proj: eqx.nn.Linear
+    p: int
+
+    def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, *, key):
+        self.p = p
+        encoder_seq_len = 2*p + 1  # left coeffs + sep + right coeffs
+        decoder_seq_len = p  # output coefficients
+        vocab_size = p + 1  # field elements + sep token
+        
+        keys = jax.random.split(key, 5)
+        
+        # Token embedding
+        self.embedding = eqx.nn.Embedding(
+            num_embeddings=vocab_size,
+            embedding_size=d_model,
+            key=keys[0]
+        )
+        
+        # Positional embeddings
+        self.pos_embedding_enc = jax.random.normal(keys[1], (encoder_seq_len, d_model)) * 0.02
+        self.pos_embedding_dec = jax.random.normal(keys[2], (decoder_seq_len, d_model)) * 0.02
+        
+        # Encoder and decoder layers
+        self.encoder_layer = EncoderLayer(d_model, n_heads, d_ff, key=keys[3])
+        self.decoder_layer = DecoderLayer(d_model, n_heads, d_ff, key=keys[4])
+        
+        # Output projection to logits
+        self.output_proj = eqx.nn.Linear(d_model, p, key=keys[5])
+
+    def __call__(self, left_poly, right_poly):
+        batch_size, p = left_poly.shape
+        
+        # Create encoder input sequence [left_coeffs, sep, right_coeffs]
+        sep_token = jnp.full((batch_size, 1), self.p)
+        encoder_input = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
+        
+        # Embed encoder inputs
+        encoder_x = jax.vmap(jax.vmap(self.embedding))(encoder_input)
+        encoder_x = encoder_x + self.pos_embedding_enc
+        
+        # Run encoder
+        encoder_output = jax.vmap(self.encoder_layer)(encoder_x)
+        
+        # Create decoder input (learned start tokens)
+        decoder_x = self.pos_embedding_dec[None].repeat(batch_size, axis=0)
+        
+        # Run decoder
+        decoder_output = jax.vmap(self.decoder_layer)(decoder_x, encoder_output)
+        
+        # Project to logits
+        logits = jax.vmap(self.output_proj)(decoder_output)
+        
+        return PolynomialPredictions(logits.reshape(-1, p, p))
 
 
 @dataclass
