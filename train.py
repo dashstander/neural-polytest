@@ -140,7 +140,7 @@ if __name__ == '__main__':
     train_pcnt = 0.95
     batch_size = 2 ** 17
     embed_dimension = 512
-    n_heads = 2
+    n_heads = 8
     model_dimension = 2048
 
     # Training hyperparameters
