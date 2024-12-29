@@ -159,7 +159,7 @@ class PolynomialMultiplicationMLP(eqx.Module):
         activations = jax.vmap(self.linear0)(xy_encoding)
         activations = jax.vmap(self.linear1)(jax.nn.relu(activations))
         activations = jax.vmap(self.linear2)(jax.nn.relu(activations))
-        logits = self.unembed(jax.nn.relu(jax.nn.relu(activations)))
+        logits = jax.vmap(self.unembed)(jax.nn.relu(jax.nn.relu(activations)))
         
         return PolynomialPredictions(logits.reshape(-1, p, p))
     
