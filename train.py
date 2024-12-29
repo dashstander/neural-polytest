@@ -66,7 +66,7 @@ def compute_loss(model, batch_x, batch_y):
 
 
 @partial(jax.pmap, axis_name='batch')
-def train_step(model, opt_state, batch_x, batch_y, step):
+def train_step(model, opt_state, batch_x, batch_y):
     (loss, coeff_loss), grads = eqx.filter_value_and_grad(compute_loss, has_aux=True)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
@@ -83,18 +83,17 @@ def eval_step(model, batch_x, batch_y):
     return jax.lax.pmean(loss, axis_name='batch')
 
 
-def train_epoch(model, opt_state, iterator, steps_per_epoch, current_step):
+def train_epoch(model, opt_state, iterator, steps_per_epoch):
     total_loss = 0
     
-    for step in range(steps_per_epoch):
+    for _ in range(steps_per_epoch):
         batch_x, batch_y = next(iterator)
         model, opt_state, loss, coeff_losses = train_step(
-            model, opt_state, batch_x, batch_y, current_step + step
+            model, opt_state, batch_x, batch_y
         )
         total_loss += loss
         metrics = {
             "loss/train": jnp.mean(loss),
-            "step": current_step + step,
         }
         # Log each coefficient's loss
         for i in range(p):
@@ -193,13 +192,10 @@ if __name__ == '__main__':
     )
     test_iter = test_iterator(data_keys[3])
 
-    current_step = 0
     for epoch in tqdm(range(n_epochs)):
         model, opt_state, train_loss = train_epoch(
-            model, opt_state, train_iter, steps_per_epoch, current_step
+            model, opt_state, train_iter, steps_per_epoch
         )
-        current_step += steps_per_epoch
-    
         if epoch % 1 == 0:
             test_x, test_y = next(test_iter)
             test_loss = eval_step(model, test_x, test_y)
