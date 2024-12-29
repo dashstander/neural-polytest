@@ -70,8 +70,8 @@ def eval_step(model, batch_x, batch_y):
     #pred = model(batch_x_left, batch_x_right)
     #predictions = pred.get_predictions()
     #correct = (predictions == batch_y).all(axis=-1).mean()
-    loss, coeff_loss = compute_loss(model, batch_x, batch_y)
-    return jax.lax.pmean(loss, axis_name='batch')
+    loss, _ = compute_loss(model, batch_x, batch_y)
+    return jax.lax.pmean(loss, axis_name='batch') 
 
 
 def train_epoch(model, opt_state, iterator, steps_per_epoch):
@@ -79,7 +79,7 @@ def train_epoch(model, opt_state, iterator, steps_per_epoch):
     
     for _ in range(steps_per_epoch):
         batch_x, batch_y = next(iterator)
-        model, opt_state, (loss, coeff_losses) = train_step(model, opt_state, batch_x, batch_y)
+        model, opt_state, loss, coeff_losses = train_step(model, opt_state, batch_x, batch_y)
         total_loss += loss
         metrics = {
             "train/loss": loss
