@@ -198,7 +198,8 @@ class PolynomialTransformerEncoder(eqx.Module):
     """Transformer encoder for polynomial multiplication."""
     embedding: eqx.nn.Embedding
     pos_embedding: jnp.ndarray
-    encoder_layer: TransformerEncoderLayer
+    encoder_layer0: TransformerEncoderLayer
+    encoder_layer1: TransformerEncoderLayer
     output_proj: eqx.nn.Linear
     p: int
     sequence_weights: eqx.nn.Linear
@@ -208,7 +209,7 @@ class PolynomialTransformerEncoder(eqx.Module):
         seq_len = 2*p + 1  # left coeffs + sep + right coeffs
         vocab_size = p + 1  # field elements + sep token
         
-        keys = jax.random.split(key, 4)
+        keys = jax.random.split(key, 5)
         
         # Token embedding
         self.embedding = eqx.nn.Embedding(
@@ -221,7 +222,13 @@ class PolynomialTransformerEncoder(eqx.Module):
         self.pos_embedding = jax.random.normal(keys[1], (seq_len, d_model)) * 0.02
         
         # Transformer layer
-        self.encoder_layer = TransformerEncoderLayer(
+        self.encoder_layer0 = TransformerEncoderLayer(
+            d_model=d_model,
+            n_heads=n_heads,
+            d_ff=d_ff,
+            key=keys[1]
+        )
+        self.encoder_layer1 = TransformerEncoderLayer(
             d_model=d_model,
             n_heads=n_heads,
             d_ff=d_ff,
@@ -250,7 +257,8 @@ class PolynomialTransformerEncoder(eqx.Module):
         x = x + self.pos_embedding
         
         # Apply transformer layer
-        x = jax.vmap(self.encoder_layer)(x)
+        x = jax.vmap(self.encoder_layer0)(x)
+        x = jax.vmap(self.encoder_layer1)(x)
         
         # Learned weighted averaging over sequence length instead of mean
         # x shape is (batch, seq_len, d_model)
