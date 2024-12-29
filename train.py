@@ -58,6 +58,8 @@ def train_step(model, opt_state, batch_x, batch_y):
     (loss, coeff_loss), grads = eqx.filter_value_and_grad(compute_loss, has_aux=True)(model, batch_x, batch_y)
     # Average gradients across devices
     grads = jax.lax.pmean(grads, axis_name='batch')
+    loss = jax.lax.pmean(loss, axis_name='batch')
+    coeff_loss = jax.lax.pmean(coeff_loss, axis_name='batch')
     #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
     #print(jtu.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, opt_state))
     updates, new_opt_state = optimizer.update(grads, opt_state)
