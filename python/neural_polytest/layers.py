@@ -407,23 +407,22 @@ class DecoderLayer(eqx.Module):
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
         x = x + ff_out
         return x
-
 class PolynomialTransformerEncoderDecoder(eqx.Module):
     embedding: eqx.nn.Embedding
     pos_embedding_enc: jnp.ndarray
     pos_embedding_dec: jnp.ndarray
-    encoder_layer: EncoderLayer
-    decoder_layer: DecoderLayer
+    encoder_layers: list[EncoderLayer]
+    decoder_layers: list[DecoderLayer]
     output_proj: eqx.nn.Linear
     p: int
 
-    def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, *, key):
+    def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, n_layers: int, *, key):
         self.p = p
         encoder_seq_len = 2*p + 1  # left coeffs + sep + right coeffs
         decoder_seq_len = p  # output coefficients
         vocab_size = p + 1  # field elements + sep token
         
-        keys = jax.random.split(key, 5)
+        keys = jax.random.split(key, 4 + 2*n_layers)
         
         # Token embedding
         self.embedding = eqx.nn.Embedding(
@@ -436,12 +435,18 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         self.pos_embedding_enc = jax.random.normal(keys[1], (encoder_seq_len, d_model)) * 0.02
         self.pos_embedding_dec = jax.random.normal(keys[2], (decoder_seq_len, d_model)) * 0.02
         
-        # Encoder and decoder layers
-        self.encoder_layer = EncoderLayer(d_model, n_heads, d_ff, key=keys[3])
-        self.decoder_layer = DecoderLayer(d_model, n_heads, d_ff, key=keys[4])
+        # Multiple encoder and decoder layers
+        self.encoder_layers = [
+            EncoderLayer(d_model, n_heads, d_ff, key=keys[i+3])
+            for i in range(n_layers)
+        ]
+        self.decoder_layers = [
+            DecoderLayer(d_model, n_heads, d_ff, key=keys[i+3+n_layers])
+            for i in range(n_layers)
+        ]
         
         # Output projection to logits
-        self.output_proj = eqx.nn.Linear(d_model, p, key=keys[5])
+        self.output_proj = eqx.nn.Linear(d_model, p, key=keys[-1])
 
     def __call__(self, left_poly, right_poly):
         batch_size, p = left_poly.shape
@@ -454,19 +459,22 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         encoder_x = jax.vmap(jax.vmap(self.embedding))(encoder_input)
         encoder_x = encoder_x + self.pos_embedding_enc
         
-        # Run encoder
-        encoder_output = jax.vmap(self.encoder_layer)(encoder_x)
+        # Run through encoder layers
+        for encoder_layer in self.encoder_layers:
+            encoder_x = jax.vmap(encoder_layer)(encoder_x)
         
         # Create decoder input (learned start tokens)
         decoder_x = self.pos_embedding_dec[None].repeat(batch_size, axis=0)
         
-        # Run decoder
-        decoder_output = jax.vmap(self.decoder_layer)(decoder_x, encoder_output)
+        # Run through decoder layers
+        for decoder_layer in self.decoder_layers:
+            decoder_x = jax.vmap(decoder_layer)(decoder_x, encoder_x)
         
         # Project to logits
-        logits = jax.vmap(self.output_proj)(jax.lax.transpose(decoder_output, (0, 2, 1)))
+        logits = jax.vmap(self.output_proj)(jax.lax.transpose(decoder_x, (0, 2, 1)))
         
         return logits
+    
 
 
 @dataclass

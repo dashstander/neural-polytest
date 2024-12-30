@@ -135,12 +135,13 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 1000
+    n_epochs = 1000 + 10
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 17
     embed_dimension = 512
     n_heads = 8
+    n_layers = 2
     model_dimension = 2048
 
     # Training hyperparameters
