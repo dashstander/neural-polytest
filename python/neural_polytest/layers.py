@@ -46,7 +46,7 @@ class LayerNorm(eqx.Module):
         self.norm = eqx.nn.LayerNorm(d_model)
 
     def __call__(self, x):
-        return jax.vmap(jax.vmap(self.norm))(x)
+        return jax.vmap(self.norm)(x)
 
 
 
@@ -507,7 +507,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
             decoder_x = jax.vmap(decoder_layer)(decoder_x, encoder_x)
         
         # Final layer norm before output projection
-        decoder_x = self.final_norm(decoder_x)
+        decoder_x = jax.vmap(self.final_norm)(decoder_x)
         
         # Project to logits
         logits = jax.vmap(self.output_proj)(jax.lax.transpose(decoder_x, (0, 2, 1)))
