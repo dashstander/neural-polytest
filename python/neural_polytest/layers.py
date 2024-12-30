@@ -365,11 +365,11 @@ class EncoderLayer(eqx.Module):
 
     def __call__(self, x):
         # Pre-norm architecture (more stable)
-        normed_x = self.attention_norm(x)
+        normed_x = jax.vmap(self.attention_norm)(x)
         attention_out = self.attention(normed_x, normed_x, normed_x)
         x = x + attention_out
         
-        normed_x = self.ff_norm(x)
+        normed_x = jax.vmap(self.ff_norm)(x)
         ff_out = jax.vmap(self.ff_linear_up)(normed_x)
         ff_out = jax.nn.relu(ff_out)
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
@@ -413,17 +413,17 @@ class DecoderLayer(eqx.Module):
     def __call__(self, x, encoder_output):
         # Pre-norm architecture
         # Self attention
-        normed_x = self.self_attention_norm(x)
+        normed_x = jax.vmap(self.self_attention_norm)(x)
         self_attn = self.self_attention(normed_x, normed_x, normed_x)
         x = x + self_attn
 
         # Cross attention to encoder outputs
-        normed_x = self.cross_attention_norm(x)
+        normed_x = jax.vmap(self.cross_attention_norm)(x)
         cross_attn = self.cross_attention(normed_x, encoder_output, encoder_output)
         x = x + cross_attn
         
         # Feedforward
-        normed_x = self.ff_norm(x)
+        normed_x = jax.vmap(self.ff_norm)(x)
         ff_out = jax.vmap(self.ff_linear_up)(normed_x)
         ff_out = jax.nn.relu(ff_out)
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
