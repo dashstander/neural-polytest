@@ -39,6 +39,17 @@ def dot_product_attention(query, key_, value, mask):
     return attn
 
 
+class LayerNorm(eqx.Module):
+    norm: eqx.nn.LayerNorm
+
+def __init__(self, d_model):
+    self.norm = eqx.nn.LayerNorm(d_model)
+
+def __call__(self, x):
+    return jax.vmap(jax.vmap(self.norm))(x)
+
+
+
 class MultiheadAttention(eqx.Module):
     query_proj: eqx.nn.Linear
     key_proj: eqx.nn.Linear
@@ -344,8 +355,8 @@ class EncoderLayer(eqx.Module):
     attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
-    attention_norm: eqx.nn.LayerNorm
-    ff_norm: eqx.nn.LayerNorm
+    attention_norm: LayerNorm
+    ff_norm: LayerNorm
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
@@ -360,8 +371,8 @@ class EncoderLayer(eqx.Module):
         self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
         
         # Add LayerNorm layers
-        self.attention_norm = eqx.nn.LayerNorm(d_model)
-        self.ff_norm = eqx.nn.LayerNorm(d_model)
+        self.attention_norm = LayerNorm(d_model)
+        self.ff_norm = LayerNorm(d_model)
 
     def __call__(self, x):
         # Pre-norm architecture (more stable)
@@ -382,9 +393,9 @@ class DecoderLayer(eqx.Module):
     cross_attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
-    self_attention_norm: eqx.nn.LayerNorm
-    cross_attention_norm: eqx.nn.LayerNorm
-    ff_norm: eqx.nn.LayerNorm
+    self_attention_norm: LayerNorm
+    cross_attention_norm: LayerNorm
+    ff_norm: LayerNorm
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         keys = jax.random.split(key, 4)
@@ -405,10 +416,9 @@ class DecoderLayer(eqx.Module):
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=keys[2])
         self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=keys[3])
         
-        # Add LayerNorm layers
-        self.self_attention_norm = eqx.nn.LayerNorm(d_model)
-        self.cross_attention_norm = eqx.nn.LayerNorm(d_model)
-        self.ff_norm = eqx.nn.LayerNorm(d_model)
+        self.self_attention_norm = LayerNorm(d_model)
+        self.cross_attention_norm = LayerNorm(d_model)
+        self.ff_norm = LayerNorm(d_model)
 
     def __call__(self, x, encoder_output):
         # Pre-norm architecture
@@ -438,7 +448,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
     encoder_layers: list[EncoderLayer]
     decoder_layers: list[DecoderLayer]
     output_proj: eqx.nn.Linear
-    final_norm: eqx.nn.LayerNorm  # Added final layer norm
+    final_norm: LayerNorm  # Added final layer norm
     p: int
 
     def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, n_layers: int, *, key):
@@ -472,7 +482,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         
         # Output projection and final normalization
         self.output_proj = eqx.nn.Linear(d_model, p, key=keys[-1])
-        self.final_norm = eqx.nn.LayerNorm(d_model)
+        self.final_norm = LayerNorm(d_model)
 
     def __call__(self, left_poly, right_poly):
         batch_size, p = left_poly.shape
