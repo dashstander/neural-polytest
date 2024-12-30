@@ -135,7 +135,7 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 1000 + 10
+    n_epochs = 1000 + 20
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 17
@@ -145,8 +145,8 @@ if __name__ == '__main__':
     model_dimension = 2048
 
     # Training hyperparameters
-    train_lr = 1.0e-4
-    warmup_epochs = 10  # Number of epochs for warmup
+    train_lr = 5.0e-4
+    warmup_epochs = 20  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
     #####################################
 
