@@ -344,6 +344,8 @@ class EncoderLayer(eqx.Module):
     attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
+    attention_norm: eqx.nn.LayerNorm
+    ff_norm: eqx.nn.LayerNorm
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         attention_key, ff_key1, ff_key2 = jax.random.split(key, 3)
@@ -356,22 +358,33 @@ class EncoderLayer(eqx.Module):
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=ff_key1)
         self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=ff_key2)
+        
+        # Add LayerNorm layers
+        self.attention_norm = eqx.nn.LayerNorm(d_model)
+        self.ff_norm = eqx.nn.LayerNorm(d_model)
 
     def __call__(self, x):
-        attention_out = self.attention(x, x, x)
+        # Pre-norm architecture (more stable)
+        normed_x = self.attention_norm(x)
+        attention_out = self.attention(normed_x, normed_x, normed_x)
         x = x + attention_out
         
-        ff_out = jax.vmap(self.ff_linear_up)(x)
+        normed_x = self.ff_norm(x)
+        ff_out = jax.vmap(self.ff_linear_up)(normed_x)
         ff_out = jax.nn.relu(ff_out)
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
         x = x + ff_out
         return x
+
 
 class DecoderLayer(eqx.Module):
     self_attention: MultiheadAttention
     cross_attention: MultiheadAttention
     ff_linear_up: eqx.nn.Linear
     ff_linear_down: eqx.nn.Linear
+    self_attention_norm: eqx.nn.LayerNorm
+    cross_attention_norm: eqx.nn.LayerNorm
+    ff_norm: eqx.nn.LayerNorm
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, *, key):
         keys = jax.random.split(key, 4)
@@ -391,22 +404,33 @@ class DecoderLayer(eqx.Module):
         )
         self.ff_linear_up = eqx.nn.Linear(d_model, d_ff, key=keys[2])
         self.ff_linear_down = eqx.nn.Linear(d_ff, d_model, key=keys[3])
+        
+        # Add LayerNorm layers
+        self.self_attention_norm = eqx.nn.LayerNorm(d_model)
+        self.cross_attention_norm = eqx.nn.LayerNorm(d_model)
+        self.ff_norm = eqx.nn.LayerNorm(d_model)
 
     def __call__(self, x, encoder_output):
-        # Cross attention to encoder outputs
-        cross_attn = self.cross_attention(x, encoder_output, encoder_output)
-        x = x + cross_attn
-
+        # Pre-norm architecture
         # Self attention
-        self_attn = self.self_attention(x, x, x)
+        normed_x = self.self_attention_norm(x)
+        self_attn = self.self_attention(normed_x, normed_x, normed_x)
         x = x + self_attn
+
+        # Cross attention to encoder outputs
+        normed_x = self.cross_attention_norm(x)
+        cross_attn = self.cross_attention(normed_x, encoder_output, encoder_output)
+        x = x + cross_attn
         
         # Feedforward
-        ff_out = jax.vmap(self.ff_linear_up)(x)
+        normed_x = self.ff_norm(x)
+        ff_out = jax.vmap(self.ff_linear_up)(normed_x)
         ff_out = jax.nn.relu(ff_out)
         ff_out = jax.vmap(self.ff_linear_down)(ff_out)
         x = x + ff_out
         return x
+
+
 class PolynomialTransformerEncoderDecoder(eqx.Module):
     embedding: eqx.nn.Embedding
     pos_embedding_enc: jnp.ndarray
@@ -414,6 +438,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
     encoder_layers: list[EncoderLayer]
     decoder_layers: list[DecoderLayer]
     output_proj: eqx.nn.Linear
+    final_norm: eqx.nn.LayerNorm  # Added final layer norm
     p: int
 
     def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, n_layers: int, *, key):
@@ -445,8 +470,9 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
             for i in range(n_layers)
         ]
         
-        # Output projection to logits
+        # Output projection and final normalization
         self.output_proj = eqx.nn.Linear(d_model, p, key=keys[-1])
+        self.final_norm = eqx.nn.LayerNorm(d_model)
 
     def __call__(self, left_poly, right_poly):
         batch_size, p = left_poly.shape
@@ -470,12 +496,14 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         for decoder_layer in self.decoder_layers:
             decoder_x = jax.vmap(decoder_layer)(decoder_x, encoder_x)
         
+        # Final layer norm before output projection
+        decoder_x = jax.vmap(self.final_norm)(decoder_x)
+        
         # Project to logits
         logits = jax.vmap(self.output_proj)(jax.lax.transpose(decoder_x, (0, 2, 1)))
         
         return logits
     
-
 
 @dataclass
 class PolynomialPredictions:
