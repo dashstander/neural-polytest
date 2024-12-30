@@ -196,7 +196,7 @@ if __name__ == '__main__':
     # Initialize model and optimizer
     key = jax.random.PRNGKey(seed)
     key, model_key = jax.random.split(key)
-    model = PolynomialTransformerEncoderDecoder(p, embed_dimension, n_heads, model_dimension, key=model_key)
+    model = PolynomialTransformerEncoderDecoder(p, embed_dimension, n_heads, model_dimension, n_layers, key=model_key)
     
     # Create optimizer with warmup and gradient clipping
     optimizer = create_optimizer(train_lr, warmup_steps, max_grad_norm)
