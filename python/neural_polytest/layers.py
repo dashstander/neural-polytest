@@ -42,11 +42,11 @@ def dot_product_attention(query, key_, value, mask):
 class LayerNorm(eqx.Module):
     norm: eqx.nn.LayerNorm
 
-def __init__(self, d_model):
-    self.norm = eqx.nn.LayerNorm(d_model)
+    def __init__(self, d_model):
+        self.norm = eqx.nn.LayerNorm(d_model)
 
-def __call__(self, x):
-    return jax.vmap(jax.vmap(self.norm))(x)
+    def __call__(self, x):
+        return jax.vmap(jax.vmap(self.norm))(x)
 
 
 
