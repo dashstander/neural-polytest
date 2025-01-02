@@ -69,7 +69,7 @@ def save_checkpoint(
     # Save each component
     eqx.tree_serialise_leaves(save_dir / f"model{current_epoch}.eqx", model_state)
 
-    eqx.tree_serialize_leaves(save_dir / f"opt_state{current_epoch}.eqx", opt_state)
+    eqx.tree_serialise_leaves(save_dir / f"opt_state{current_epoch}.eqx", opt_state)
 
     with open(save_dir / f"rng{current_epoch}.npy", "wb") as f:
         np.save(f, rng_key)
