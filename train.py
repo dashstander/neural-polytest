@@ -1,9 +1,11 @@
 from functools import partial
+import glob
 import jax
 import jax.numpy as jnp
 import equinox as eqx
 import numpy as np
 import optax
+import os
 from tqdm.auto import tqdm
 import wandb
 
@@ -37,16 +39,105 @@ def compute_logit_entropy(logits):
     entropy = -jnp.sum(probs * jnp.log(probs + eps), axis=-1)
     return jnp.mean(entropy)
 
+def save_checkpoint(
+    model, 
+    opt_state, 
+    rng_key,
+    current_epoch,
+    save_dir="checkpoints"
+):
+    """Save complete training state
+    
+    Args:
+        model: The replicated model
+        opt_state: The replicated optimizer state
+        rng_key: Current RNG key
+        current_epoch: Current epoch number
+        save_dir: Directory to save checkpoints
+    """
+    # Create checkpoint directory if it doesn't exist
+    import os
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # Get model and optimizer state from accelerator
+    model_state = jax.device_get(model)
+    opt_state = jax.device_get(opt_state)
+    
+    # Save each component
+    eqx.tree_serialise_leaves(os.path.join(save_dir, "model.eqx"), model_state)
+    
+    with open(os.path.join(save_dir, "opt_state.eqx"), "wb") as f:
+        f.write(jax.numpy.save(opt_state))
 
-def save_checkpoint(model, save_path="checkpoint.eqx"):
-    """Save the latest model checkpoint, overwriting previous one"""
-    model_state = jax.device_get(model)  # Get from accelerator
-    eqx.tree_serialise_leaves(save_path, model_state)
+    with open(os.path.join(save_dir, "rng.npy"), "wb") as f:
+        np.save(f, rng_key)
+
+    
+    # Keep a backup of the last checkpoint
+    if current_epoch > 0:
+        import shutil
+        backup_dir = save_dir + "_backup"
+        if os.path.exists(save_dir):
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            shutil.copytree(save_dir, backup_dir)
+
+def load_checkpoint(
+    model_template,
+    optimizer,
+    save_dir="checkpoints"
+):
+    """Load complete training state
+    
+    Args:
+        model_template: An instance of the model architecture to load parameters into
+        optimizer: The optimizer to restore state for
+        save_dir: Directory containing checkpoints
+    
+    Returns:
+        model: The loaded model
+        opt_state: The loaded optimizer state
+        rng_key: The loaded RNG key
+        current_epoch: The loaded epoch number
+    """
 
 
-def load_checkpoint(model_template, load_path="checkpoint.eqx"):
-    """Load the latest checkpoint"""
-    return eqx.tree_deserialise_leaves(load_path, model_template)
+    if not os.path.exists(save_dir):
+        raise ValueError(f"Checkpoint directory {save_dir} does not exist")
+    
+    # Find the latest epoch by looking at model files
+    model_files = glob.glob(os.path.join(save_dir, "model*.eqx"))
+    if not model_files:
+        raise ValueError(f"No checkpoints found in {save_dir}")
+    
+    # Extract epoch numbers and find the latest
+    epochs = [int(f.split('model')[-1].split('.')[0]) for f in model_files]
+    latest_epoch = max(epochs)
+        
+    # Load model
+    model = eqx.tree_deserialise_leaves(
+        os.path.join(save_dir, f"model{latest_epoch}.eqx"), 
+        model_template
+    )
+    
+    # Load raw optimizer state values
+    with open(os.path.join(save_dir, f"opt_state{latest_epoch}.eqx"), "rb") as f:
+        raw_opt_state = jax.numpy.load(f)
+        
+    # Initialize optimizer with the model parameters first
+    init_opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
+    
+    # Replace the initialized values with our loaded values
+    # This ensures the optimizer state has the correct pytree structure
+    opt_state = jax.tree_util.tree_map(
+        lambda x, y: y if y is not None else x,
+        init_opt_state,
+        raw_opt_state
+    )
+    # Load RNG key
+    with open(os.path.join(save_dir, f"rng{latest_epoch}.npy"), "rb") as f:
+        rng_key = np.load(f)
+        
+    return model, opt_state, rng_key, latest_epoch
 
 
 def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
@@ -135,7 +226,7 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 1000 + 20
+    n_epochs = 2000 + 100
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 17
@@ -145,8 +236,8 @@ if __name__ == '__main__':
     model_dimension = 2048
 
     # Training hyperparameters
-    train_lr = 1.0e-4
-    warmup_epochs = 20  # Number of epochs for warmup
+    train_lr = 2.0e-4
+    warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
     #####################################
 
@@ -206,7 +297,20 @@ if __name__ == '__main__':
     model = jax.device_put_replicated(model, jax.devices())
     opt_state = jax.device_put_replicated(opt_state, jax.devices())
 
-    # Training loop
+   # Training loop
+    current_epoch = 0
+    
+    # Try to load checkpoint if it exists
+    try:
+        model, opt_state, key, current_epoch = load_checkpoint(model, optimizer)
+        print(f"Resuming from epoch {current_epoch}")
+        # Put back on devices
+        model = jax.device_put_replicated(model, jax.devices())
+        opt_state = jax.device_put_replicated(opt_state, jax.devices())
+    except (FileNotFoundError, ValueError) as e:
+        print("Starting fresh training")
+        
+    # Generate data iterators
     key, *data_keys = jax.random.split(key, num=5)
     train_iterator, steps_per_epoch = make_batch_iterator(
         X_left_train, X_right_train, y_train, 
@@ -220,7 +324,7 @@ if __name__ == '__main__':
     )
     test_iter = test_iterator(data_keys[3])
 
-    for epoch in tqdm(range(n_epochs)):
+    for epoch in tqdm(range(current_epoch, n_epochs)):
         model, opt_state, train_loss = train_epoch(
             model, opt_state, train_iter, steps_per_epoch
         )
@@ -238,8 +342,8 @@ if __name__ == '__main__':
             }
             wandb.log(metrics)
         
-        # Save checkpoint every other epoch
-        if epoch % 2 == 0:
-            save_checkpoint(model)
+        # Save checkpoint every 10 epochs and at the end
+        if epoch % 500 == 0 or epoch == n_epochs - 1:
+            save_checkpoint(model, opt_state, key, epoch)
 
     wandb.finish()
