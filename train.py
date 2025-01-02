@@ -65,7 +65,7 @@ def save_checkpoint(
     
     # Save each component
     eqx.tree_serialise_leaves(os.path.join(save_dir, "model.eqx"), model_state)
-    
+
     with open(os.path.join(save_dir, "opt_state.eqx"), "wb") as f:
         f.write(jax.numpy.save(opt_state))
 
@@ -343,7 +343,7 @@ if __name__ == '__main__':
             wandb.log(metrics)
         
         # Save checkpoint every 10 epochs and at the end
-        if epoch % 500 == 0 or epoch == n_epochs - 1:
+        if epoch % 100 == 0 or epoch == n_epochs - 1:
             save_checkpoint(model, opt_state, key, epoch)
 
     wandb.finish()
