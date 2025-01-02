@@ -6,6 +6,7 @@ import equinox as eqx
 import numpy as np
 import optax
 import os
+from pathlib import Path
 from tqdm.auto import tqdm
 import wandb
 
@@ -39,6 +40,7 @@ def compute_logit_entropy(logits):
     entropy = -jnp.sum(probs * jnp.log(probs + eps), axis=-1)
     return jnp.mean(entropy)
 
+
 def save_checkpoint(
     model, 
     opt_state, 
@@ -56,30 +58,22 @@ def save_checkpoint(
         save_dir: Directory to save checkpoints
     """
     # Create checkpoint directory if it doesn't exist
-    import os
-    os.makedirs(save_dir, exist_ok=True)
+
+    save_dir = Path(save_dir)
+    save_dir.mkdir(exist_ok=True)
     
     # Get model and optimizer state from accelerator
     model_state = jax.device_get(model)
     opt_state = jax.device_get(opt_state)
     
     # Save each component
-    eqx.tree_serialise_leaves(os.path.join(save_dir, "model.eqx"), model_state)
+    eqx.tree_serialise_leaves(save_dir / f"model{current_epoch}.eqx", model_state)
 
-    with open(os.path.join(save_dir, "opt_state.eqx"), "wb") as f:
-        f.write(jax.numpy.save(opt_state))
+    eqx.tree_serialize_leaves(save_dir / f"opt_state{current_epoch}.eqx", opt_state)
 
-    with open(os.path.join(save_dir, "rng.npy"), "wb") as f:
+    with open(save_dir / f"rng{current_epoch}.npy", "wb") as f:
         np.save(f, rng_key)
 
-    
-    # Keep a backup of the last checkpoint
-    if current_epoch > 0:
-        import shutil
-        backup_dir = save_dir + "_backup"
-        if os.path.exists(save_dir):
-            shutil.rmtree(backup_dir, ignore_errors=True)
-            shutil.copytree(save_dir, backup_dir)
 
 def load_checkpoint(
     model_template,
