@@ -220,7 +220,7 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 2000 + 100
+    n_epochs = 298
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 17
@@ -329,7 +329,7 @@ if __name__ == '__main__':
             test_loss, test_entropy = eval_step(model, test_x, test_y)
             
             metrics = {
-                "loss/epoch": train_loss,
+                "loss/epoch": jnp.mean(train_loss),
                 "loss/test": jnp.mean(test_loss),
                 "test_entropy": jnp.mean(test_entropy),
                 "epoch": epoch,
@@ -339,5 +339,10 @@ if __name__ == '__main__':
         # Save checkpoint every 10 epochs and at the end
         if epoch % 100 == 0 or epoch == n_epochs - 1:
             save_checkpoint(model, opt_state, key, epoch)
+        
+        if test_loss < 1.0e-5:
+            save_checkpoint(model, opt_state, key, epoch)
+            print(f'Loss {test_loss} below threshold')
+        break
 
     wandb.finish()
