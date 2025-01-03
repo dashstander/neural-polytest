@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import numpy as np
 import optax
-import orbax
+import orbax.checkpoint as ocp
 from tqdm.auto import tqdm
 import wandb
 
@@ -52,19 +52,19 @@ def compute_logit_entropy(logits):
 
 def create_checkpointer():
     """Create an Orbax CheckpointManager"""
-    options = orbax.checkpoint.CheckpointManagerOptions(
+    options = ocp.CheckpointManagerOptions(
         max_to_keep=None,  # Keep all checkpoints
         save_interval_steps=100  # Only used if using step-based checkpointing
     )
-    ckptr = orbax.checkpoint.CheckpointManager(
+    ckptr = ocp.CheckpointManager(
         directory="checkpoints",
-        checkpointers=orbax.checkpoint.PyTreeCheckpointer(),
+        checkpointers=ocp.PyTreeCheckpointer(),
         options=options,
     )
     return ckptr
 
 def save_checkpoint(
-    ckptr: orbax.checkpoint.CheckpointManager,
+    ckptr: ocp.CheckpointManager,
     model,
     opt_state,
     rng_key,
@@ -81,7 +81,7 @@ def save_checkpoint(
 
 
 def load_latest_checkpoint(
-    ckptr: orbax.checkpoint.CheckpointManager,
+    ckptr: ocp.CheckpointManager,
     model_template,
     optimizer,
 ):
