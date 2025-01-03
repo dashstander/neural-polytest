@@ -108,10 +108,6 @@ def load_latest_checkpoint(
     # Load RNG key
     with open(os.path.join(save_dir, f"rng{latest_epoch}.npy"), "rb") as f:
         rng_key = np.load(f)
-    
-    # Replicate for training
-    model = jax.device_put_replicated(model, jax.devices())
-    opt_state = jax.device_put_replicated(opt_state, jax.devices())
         
     return model, opt_state, rng_key, latest_epoch
 
@@ -270,10 +266,6 @@ if __name__ == '__main__':
     optimizer = create_optimizer(train_lr, warmup_steps, decay_steps, max_grad_norm)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    # Replicate model and optimizer state across devices
-    model = jax.device_put_replicated(model, jax.devices())
-    opt_state = jax.device_put_replicated(opt_state, jax.devices())
-
 
     # Try to restore
     try:
@@ -283,7 +275,11 @@ if __name__ == '__main__':
         opt_state = jax.device_put_replicated(opt_state, jax.devices())
     except ValueError as e:
         print("Starting fresh training")
+        # Replicate model and optimizer state across devices
         current_epoch = 0
+    
+    model = jax.device_put_replicated(model, jax.devices())
+    opt_state = jax.device_put_replicated(opt_state, jax.devices())
 
     # Generate data iterators
     key, *data_keys = jax.random.split(key, num=5)
