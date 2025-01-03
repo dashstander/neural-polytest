@@ -6,7 +6,6 @@ import equinox as eqx
 import numpy as np
 import optax
 import os
-from pathlib import Path
 from tqdm.auto import tqdm
 import wandb
 

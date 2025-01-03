@@ -10,7 +10,6 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-
 def dot_product_attention_weights(
     query,
     key,
@@ -194,7 +193,7 @@ class MultiheadAttention(eqx.Module):
 
 class FieldEmbed(eqx.Module):
     """Learns embeddings for elements of a finite field F_p."""
-    p: int
+    p: int = eqx.field(static=True)
     embed_dim: int
     embedding: eqx.nn.Embedding
 
@@ -222,7 +221,7 @@ class PolyEncoder(eqx.Module):
         in_dim (int): Dimension of input coefficient embeddings
         poly_dim (int): Dimension of output polynomial encoding
     """
-    p: int
+    p: int = eqx.field(static=True)
     in_dim: int
     poly_dim: int
     proj_up: eqx.nn.Linear
@@ -293,7 +292,7 @@ class PolynomialMultiplicationMLP(eqx.Module):
         poly_dim (int): Dimension for encoding full polynomials
         model_dim (int): Internal dimension for computation
     """
-    p: int
+    p: int = eqx.field(static=True)
     embed_dim: int
     poly_dim: int
     model_dim: int
@@ -449,7 +448,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
     decoder_layers: list[DecoderLayer]
     output_proj: eqx.nn.Linear
     final_norm: LayerNorm  # Added final layer norm
-    p: int
+    p: int = eqx.field(static=True)
 
     def __init__(self, p: int, d_model: int, n_heads: int, d_ff: int, n_layers: int, *, key):
         self.p = p
@@ -488,7 +487,7 @@ class PolynomialTransformerEncoderDecoder(eqx.Module):
         batch_size, p = left_poly.shape
         
         # Create encoder input sequence [left_coeffs, sep, right_coeffs]
-        sep_token = jnp.full((batch_size, 1), self.p)
+        sep_token = jnp.full((batch_size, 1), p)
         encoder_input = jnp.concatenate([left_poly, sep_token, right_poly], axis=1)
         
         # Embed encoder inputs
