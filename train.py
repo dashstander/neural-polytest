@@ -1,12 +1,10 @@
 from functools import partial
-import glob
 import jax
 import jax.numpy as jnp
 import equinox as eqx
 import numpy as np
 import optax
-import os
-from pathlib import Path
+import orbax
 from tqdm.auto import tqdm
 import wandb
 
@@ -14,7 +12,7 @@ from neural_polytest.finite_fields import PyGFPolynomial
 from neural_polytest.layers import PolynomialTransformerEncoderDecoder
 
 
-def create_optimizer(train_lr: float, warmup_steps: int, max_grad_norm: float):
+def create_optimizer(train_lr: float, warmup_steps: int, decay_steps: int,  max_grad_norm: float):
     """Create optimizer with learning rate warmup and gradient clipping"""
     # Linear warmup schedule
     warmup_schedule = optax.linear_schedule(
@@ -22,11 +20,21 @@ def create_optimizer(train_lr: float, warmup_steps: int, max_grad_norm: float):
         end_value=train_lr,
         transition_steps=warmup_steps
     )
-    
+    decay_schedule = optax.linear_schedule(
+        init_value=train_lr,
+        end_value=0.0,
+        transition_steps=decay_steps
+    )
+
+    schedule = optax.join_schedules(
+        schedules=[warmup_schedule, decay_schedule],
+        boundaries=[warmup_steps]
+    )
+
     # Combine optimizers and transformations
     optimizer = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),  # Gradient clipping
-        optax.adam(learning_rate=warmup_schedule)   # Adam with warmup
+        optax.adam(learning_rate=schedule)   # Adam with warmup
     )
     
     return optimizer
@@ -41,80 +49,62 @@ def compute_logit_entropy(logits):
     return jnp.mean(entropy)
 
 
+
+def create_checkpointer():
+    """Create an Orbax CheckpointManager"""
+    options = orbax.checkpoint.CheckpointManagerOptions(
+        max_to_keep=None,  # Keep all checkpoints
+        save_interval_steps=100  # Only used if using step-based checkpointing
+    )
+    ckptr = orbax.checkpoint.CheckpointManager(
+        directory="checkpoints",
+        checkpointers=orbax.checkpoint.PyTreeCheckpointer(),
+        options=options,
+    )
+    return ckptr
+
 def save_checkpoint(
-    model, 
-    opt_state, 
+    ckptr: orbax.checkpoint.CheckpointManager,
+    model,
+    opt_state,
     rng_key,
-    current_epoch,
-    save_dir="checkpoints"
+    current_epoch: int,
 ):
-    """Save complete training state
-    
-    Args:
-        model: The replicated model
-        opt_state: The replicated optimizer state
-        rng_key: Current RNG key
-        current_epoch: Current epoch number
-        save_dir: Directory to save checkpoints
-    """
-    # Create checkpoint directory if it doesn't exist
-
-    save_dir = Path(save_dir)
-    save_dir.mkdir(exist_ok=True)
-    
-    # Get model and optimizer state from accelerator
-    model_state = jax.device_get(model)
-    opt_state = jax.device_get(opt_state)
-    
-    # Save each component
-    eqx.tree_serialise_leaves(save_dir / f"model{current_epoch}.eqx", model_state)
-
-    eqx.tree_serialise_leaves(save_dir / f"opt_state{current_epoch}.eqx", opt_state)
-
-    with open(save_dir / f"rng{current_epoch}.npy", "wb") as f:
-        np.save(f, rng_key)
+    """Save complete training state using Orbax"""
+    ckpt_data = {
+        "model": model,
+        "opt_state": opt_state,
+        "rng_key": rng_key,
+        "epoch": current_epoch,
+    }
+    ckptr.save(current_epoch, ckpt_data)
 
 
 def load_latest_checkpoint(
+    ckptr: orbax.checkpoint.CheckpointManager,
     model_template,
     optimizer,
-    save_dir="checkpoints"
 ):
-    
-    if not os.path.exists(save_dir):
-        raise ValueError(f"Checkpoint directory {save_dir} does not exist")
-    
-    model_files = glob.glob(os.path.join(save_dir, "model*.eqx"))
-    if not model_files:
-        raise ValueError(f"No checkpoints found in {save_dir}")
-    
-    epochs = [int(f.split('model')[-1].split('.')[0]) for f in model_files]
-    latest_epoch = max(epochs)
-    
-    # Load model with unreplicated template
-    model = eqx.tree_deserialise_leaves(
-        os.path.join(save_dir, f"model{latest_epoch}.eqx"), 
-        model_template
-    )
-    
-    # Initialize optimizer state with unreplicated model
-    init_opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
-    
-    # Load optimizer state with unreplicated template
-    opt_state = eqx.tree_deserialise_leaves(
-        os.path.join(save_dir, f"opt_state{latest_epoch}.eqx"),
-        init_opt_state
-    )
-    
-    # Load RNG key
-    with open(os.path.join(save_dir, f"rng{latest_epoch}.npy"), "rb") as f:
-        rng_key = np.load(f)
-    
-    # Now replicate both model and optimizer state
-    model = jax.device_put_replicated(model, jax.devices())
-    opt_state = jax.device_put_replicated(opt_state, jax.devices())
+    """Load the most recent checkpoint using Orbax"""
+    latest_epoch = ckptr.latest_step()
+    if latest_epoch is None:
+        raise ValueError("No checkpoints found")
         
-    return model, opt_state, rng_key, latest_epoch
+    # Create structure for restore
+    ckpt_data = {
+        "model": model_template,
+        "opt_state": optimizer.init(eqx.filter(model_template, eqx.is_inexact_array)),
+        "rng_key": None,
+        "epoch": None,
+    }
+    
+    restored = ckptr.restore(latest_epoch, items=ckpt_data)
+    return (
+        restored["model"], 
+        restored["opt_state"], 
+        restored["rng_key"], 
+        restored["epoch"]
+    )
 
 
 def make_batch_iterator(X_left, X_right, y, batch_size, n_devices, key):
@@ -203,7 +193,7 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 298
+    n_epochs = 2000 + 100
     seed = 0
     train_pcnt = 0.95
     batch_size = 2 ** 17
@@ -260,6 +250,7 @@ if __name__ == '__main__':
     # Calculate warmup steps
     steps_per_epoch = len(X_left_train) // batch_size
     warmup_steps = warmup_epochs * steps_per_epoch
+    decay_steps = (n_epochs - warmup_epochs) * steps_per_epoch
 
     # Initialize model and optimizer
     key = jax.random.PRNGKey(seed)
@@ -267,26 +258,26 @@ if __name__ == '__main__':
     model = PolynomialTransformerEncoderDecoder(p, embed_dimension, n_heads, model_dimension, n_layers, key=model_key)
     
     # Create optimizer with warmup and gradient clipping
-    optimizer = create_optimizer(train_lr, warmup_steps, max_grad_norm)
+    optimizer = create_optimizer(train_lr, warmup_steps, decay_steps, max_grad_norm)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     # Replicate model and optimizer state across devices
     model = jax.device_put_replicated(model, jax.devices())
     opt_state = jax.device_put_replicated(opt_state, jax.devices())
 
-   # Training loop
-    current_epoch = 0
-    
+  # Initialize checkpointer at start
+    ckptr = create_checkpointer()
+
+    # Try to restore
     try:
-        # Try to load checkpoint if it exists
-        model, opt_state, key, current_epoch = load_latest_checkpoint(model, optimizer)
+        model, opt_state, key, current_epoch = load_latest_checkpoint(ckptr, model, optimizer)
         print(f"Resuming from epoch {current_epoch}")
-        # Put back on devices
         model = jax.device_put_replicated(model, jax.devices())
         opt_state = jax.device_put_replicated(opt_state, jax.devices())
-    except (ValueError, FileNotFoundError):
-        print("Starting fresh run.")
-        
+    except ValueError as e:
+        print("Starting fresh training")
+        current_epoch = 0
+
     # Generate data iterators
     key, *data_keys = jax.random.split(key, num=5)
     train_iterator, steps_per_epoch = make_batch_iterator(
@@ -301,6 +292,7 @@ if __name__ == '__main__':
     )
     test_iter = test_iterator(data_keys[3])
 
+    # Training loop
     for epoch in tqdm(range(current_epoch, n_epochs)):
         model, opt_state, train_loss = train_epoch(
             model, opt_state, train_iter, steps_per_epoch
@@ -320,11 +312,11 @@ if __name__ == '__main__':
             wandb.log(metrics)
         
         # Save checkpoint every 10 epochs and at the end
-        if epoch % 100 == 0 or epoch == n_epochs - 1:
-            save_checkpoint(model, opt_state, key, epoch)
+        if epoch % 100 == 0:
+            save_checkpoint(ckptr, model, opt_state, key, epoch)
         
-        if test_loss < 1.0e-5:
-            save_checkpoint(model, opt_state, key, epoch)
+        if test_loss < 1.0e-7:
+            save_checkpoint(ckptr, model, opt_state, key, epoch)
             print(f'Loss {test_loss} below threshold')
         break
 

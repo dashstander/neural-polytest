@@ -1,17 +1,18 @@
 [project]
 name = "neural-polytest"
 version = "0.1.0"
-description = "Add your description here"
+description = "Polynomial multiplication and identity testing with neural networks"
 authors = [
     { name = "Dashiell Stander", email = "dash.stander@gmail.com" }
 ]
 dependencies = [
     "galois>=0.4.3",
-    "jax[tpu]>=0.4.38",
+    "jax>=0.4.38",
     "optax>=0.2.4",
     "wandb>=0.19.1",
     "equinox>=0.11.11",
     "tqdm>=4.67.1",
+    "orbax-checkpoint>=0.11.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
