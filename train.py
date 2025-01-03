@@ -75,26 +75,15 @@ def save_checkpoint(
         np.save(f, rng_key)
 
 
-def load_checkpoint(
+def load_latest_checkpoint(
     model_template,
     optimizer,
     save_dir="checkpoints"
 ):
-    """Load complete training state
+    """Load the most recent checkpoint based on epoch numbers in filenames"""
+    import os
+    import glob
     
-    Args:
-        model_template: An instance of the model architecture to load parameters into
-        optimizer: The optimizer to restore state for
-        save_dir: Directory containing checkpoints
-    
-    Returns:
-        model: The loaded model
-        opt_state: The loaded optimizer state
-        rng_key: The loaded RNG key
-        current_epoch: The loaded epoch number
-    """
-
-
     if not os.path.exists(save_dir):
         raise ValueError(f"Checkpoint directory {save_dir} does not exist")
     
@@ -106,27 +95,21 @@ def load_checkpoint(
     # Extract epoch numbers and find the latest
     epochs = [int(f.split('model')[-1].split('.')[0]) for f in model_files]
     latest_epoch = max(epochs)
-        
+    
     # Load model
     model = eqx.tree_deserialise_leaves(
         os.path.join(save_dir, f"model{latest_epoch}.eqx"), 
         model_template
     )
     
-    # Load raw optimizer state values
-    with open(os.path.join(save_dir, f"opt_state{latest_epoch}.eqx"), "rb") as f:
-        raw_opt_state = jax.numpy.load(f)
-        
-    # Initialize optimizer with the model parameters first
+    # Initialize optimizer state to get the structure
     init_opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
-    
-    # Replace the initialized values with our loaded values
-    # This ensures the optimizer state has the correct pytree structure
-    opt_state = jax.tree_util.tree_map(
-        lambda x, y: y if y is not None else x,
-        init_opt_state,
-        raw_opt_state
+    # Load the saved state directly into the same structure
+    opt_state = eqx.tree_deserialise_leaves(
+        os.path.join(save_dir, f"opt_state{latest_epoch}.eqx"),
+        init_opt_state
     )
+    
     # Load RNG key
     with open(os.path.join(save_dir, f"rng{latest_epoch}.npy"), "rb") as f:
         rng_key = np.load(f)
