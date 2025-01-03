@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 import wandb
 
 from neural_polytest.finite_fields import PyGFPolynomial
-from neural_polytest.layers import PolynomialTransformerEncoderDecoder
+from neural_polytest.transformer import PolynomialTransformerEncoderDecoder
 
 
 def create_optimizer(train_lr: float, warmup_steps: int, decay_steps: int,  max_grad_norm: float):
@@ -61,8 +61,8 @@ def save_checkpoint(
     os.makedirs(save_dir, exist_ok=True)
     
     # Get unreplicated model and optimizer state
-    model_state = jax.device_get(jax.tree_map(lambda x: x[0], model))
-    opt_state = jax.device_get(jax.tree_map(lambda x: x[0], opt_state))
+    model_state = jax.device_get(jax.tree.map(lambda x: x[0], model))
+    opt_state = jax.device_get(jax.tree.map(lambda x: x[0], opt_state))
     
     # Save each component with epoch number in filename
     eqx.tree_serialise_leaves(os.path.join(save_dir, f"model{current_epoch}.eqx"), model_state)
