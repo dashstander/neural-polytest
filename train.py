@@ -5,6 +5,7 @@ import equinox as eqx
 import numpy as np
 import optax
 import orbax.checkpoint as ocp
+from pathlib import Path
 from tqdm.auto import tqdm
 import wandb
 
@@ -50,14 +51,15 @@ def compute_logit_entropy(logits):
 
 
 
-def create_checkpointer():
+def create_checkpointer(ckpt_dir='checkpoints'):
     """Create an Orbax CheckpointManager"""
+    ckpt_dir = Path(ckpt_dir)
     options = ocp.CheckpointManagerOptions(
         max_to_keep=None,  # Keep all checkpoints
         save_interval_steps=100  # Only used if using step-based checkpointing
     )
     ckptr = ocp.CheckpointManager(
-        directory="checkpoints",
+        directory=str(ckpt_dir.absolute()),
         checkpointers=ocp.PyTreeCheckpointer(),
         options=options,
     )
