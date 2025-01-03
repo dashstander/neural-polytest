@@ -277,12 +277,15 @@ if __name__ == '__main__':
    # Training loop
     current_epoch = 0
     
-    # Try to load checkpoint if it exists
-    model, opt_state, key, current_epoch = load_checkpoint(model, optimizer)
-    print(f"Resuming from epoch {current_epoch}")
-    # Put back on devices
-    model = jax.device_put_replicated(model, jax.devices())
-    opt_state = jax.device_put_replicated(opt_state, jax.devices())
+    try:
+        # Try to load checkpoint if it exists
+        model, opt_state, key, current_epoch = load_latest_checkpoint(model, optimizer)
+        print(f"Resuming from epoch {current_epoch}")
+        # Put back on devices
+        model = jax.device_put_replicated(model, jax.devices())
+        opt_state = jax.device_put_replicated(opt_state, jax.devices())
+    except (ValueError, FileNotFoundError):
+        print("Starting fresh run.")
         
     # Generate data iterators
     key, *data_keys = jax.random.split(key, num=5)
