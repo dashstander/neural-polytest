@@ -295,14 +295,11 @@ if __name__ == '__main__':
     current_epoch = 0
     
     # Try to load checkpoint if it exists
-    try:
-        model, opt_state, key, current_epoch = load_checkpoint(model, optimizer)
-        print(f"Resuming from epoch {current_epoch}")
-        # Put back on devices
-        model = jax.device_put_replicated(model, jax.devices())
-        opt_state = jax.device_put_replicated(opt_state, jax.devices())
-    except (FileNotFoundError, ValueError) as e:
-        print("Starting fresh training")
+    model, opt_state, key, current_epoch = load_checkpoint(model, optimizer)
+    print(f"Resuming from epoch {current_epoch}")
+    # Put back on devices
+    model = jax.device_put_replicated(model, jax.devices())
+    opt_state = jax.device_put_replicated(opt_state, jax.devices())
         
     # Generate data iterators
     key, *data_keys = jax.random.split(key, num=5)
