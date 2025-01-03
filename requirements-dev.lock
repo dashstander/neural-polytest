@@ -13,7 +13,6 @@
 absl-py==2.1.0
     # via chex
     # via optax
-    # via orbax-checkpoint
 annotated-types==0.7.0
     # via pydantic
 anyio==4.7.0
@@ -67,15 +66,12 @@ equinox==0.11.11
     # via neural-polytest
 etils==1.11.0
     # via optax
-    # via orbax-checkpoint
 executing==2.1.0
     # via stack-data
 fastjsonschema==2.21.1
     # via nbformat
 fqdn==1.5.1
     # via jsonschema
-fsspec==2024.12.0
-    # via etils
 galois==0.4.3
     # via neural-polytest
 gitdb==4.0.11
@@ -88,15 +84,11 @@ httpcore==1.0.7
     # via httpx
 httpx==0.28.1
     # via jupyterlab
-humanize==4.11.0
-    # via orbax-checkpoint
 idna==3.10
     # via anyio
     # via httpx
     # via jsonschema
     # via requests
-importlib-resources==6.5.2
-    # via etils
 iniconfig==2.0.0
     # via pytest
 ipykernel==6.29.5
@@ -110,7 +102,6 @@ jax==0.4.38
     # via equinox
     # via neural-polytest
     # via optax
-    # via orbax-checkpoint
 jaxlib==0.4.38
     # via chex
     # via jax
@@ -175,9 +166,6 @@ mistune==3.0.2
 ml-dtypes==0.5.0
     # via jax
     # via jaxlib
-    # via tensorstore
-msgpack==1.1.0
-    # via orbax-checkpoint
 nbclient==0.10.2
     # via nbconvert
 nbconvert==7.16.4
@@ -188,7 +176,6 @@ nbformat==5.10.4
     # via nbconvert
 nest-asyncio==1.6.0
     # via ipykernel
-    # via orbax-checkpoint
 notebook-shim==0.2.4
     # via jupyterlab
 numba==0.60.0
@@ -201,14 +188,10 @@ numpy==2.0.2
     # via ml-dtypes
     # via numba
     # via optax
-    # via orbax-checkpoint
     # via scipy
-    # via tensorstore
 opt-einsum==3.4.0
     # via jax
 optax==0.2.4
-    # via neural-polytest
-orbax-checkpoint==0.11.0
     # via neural-polytest
 overrides==7.7.0
     # via jupyter-server
@@ -236,7 +219,6 @@ prometheus-client==0.21.1
 prompt-toolkit==3.0.48
     # via ipython
 protobuf==5.29.2
-    # via orbax-checkpoint
     # via wandb
 psutil==6.1.1
     # via ipykernel
@@ -263,7 +245,6 @@ python-json-logger==3.2.1
     # via jupyter-events
 pyyaml==6.0.2
     # via jupyter-events
-    # via orbax-checkpoint
     # via wandb
 pyzmq==26.2.0
     # via ipykernel
@@ -299,8 +280,6 @@ setuptools==75.6.0
     # via chex
     # via jupyterlab
     # via wandb
-simplejson==3.19.3
-    # via orbax-checkpoint
 six==1.17.0
     # via docker-pycreds
     # via python-dateutil
@@ -313,8 +292,6 @@ soupsieve==2.6
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
-tensorstore==0.1.71
-    # via orbax-checkpoint
 terminado==0.18.1
     # via jupyter-server
     # via jupyter-server-terminals
@@ -351,7 +328,6 @@ typing-extensions==4.12.2
     # via equinox
     # via etils
     # via galois
-    # via orbax-checkpoint
     # via pydantic
     # via pydantic-core
 uri-template==1.3.0
@@ -370,5 +346,3 @@ webencodings==0.5.1
     # via tinycss2
 websocket-client==1.8.0
     # via jupyter-server
-zipp==3.21.0
-    # via etils
