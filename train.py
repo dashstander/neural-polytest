@@ -80,13 +80,10 @@ def load_latest_checkpoint(
     optimizer,
     save_dir="checkpoints"
 ):
-    import os
-    import glob
     
     if not os.path.exists(save_dir):
         raise ValueError(f"Checkpoint directory {save_dir} does not exist")
     
-    # Find the latest epoch
     model_files = glob.glob(os.path.join(save_dir, "model*.eqx"))
     if not model_files:
         raise ValueError(f"No checkpoints found in {save_dir}")
@@ -94,20 +91,16 @@ def load_latest_checkpoint(
     epochs = [int(f.split('model')[-1].split('.')[0]) for f in model_files]
     latest_epoch = max(epochs)
     
-    # Put template on devices before deserializing
-    model_template = jax.device_put_replicated(model_template, jax.devices())
-    
-    # Load model with replicated template
+    # Load model with unreplicated template
     model = eqx.tree_deserialise_leaves(
         os.path.join(save_dir, f"model{latest_epoch}.eqx"), 
         model_template
     )
     
-    # Initialize and replicate optimizer state
+    # Initialize optimizer state with unreplicated model
     init_opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
-    init_opt_state = jax.device_put_replicated(init_opt_state, jax.devices())
     
-    # Load optimizer state with replicated template
+    # Load optimizer state with unreplicated template
     opt_state = eqx.tree_deserialise_leaves(
         os.path.join(save_dir, f"opt_state{latest_epoch}.eqx"),
         init_opt_state
@@ -116,6 +109,10 @@ def load_latest_checkpoint(
     # Load RNG key
     with open(os.path.join(save_dir, f"rng{latest_epoch}.npy"), "rb") as f:
         rng_key = np.load(f)
+    
+    # Now replicate both model and optimizer state
+    model = jax.device_put_replicated(model, jax.devices())
+    opt_state = jax.device_put_replicated(opt_state, jax.devices())
         
     return model, opt_state, rng_key, latest_epoch
 
