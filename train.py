@@ -312,7 +312,7 @@ if __name__ == '__main__':
             wandb.log(metrics)
         
         # Save checkpoint every 10 epochs and at the end
-        if epoch % 1 == 0:
+        if epoch % 100 == 0:
             save_checkpoint(model, opt_state, key, epoch)
         
         if jnp.mean(test_loss) < 1.0e-7:
