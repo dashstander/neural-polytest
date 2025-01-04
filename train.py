@@ -270,8 +270,6 @@ if __name__ == '__main__':
     try:
         model, opt_state, key, current_epoch = load_latest_checkpoint(model, optimizer)
         print(f"Resuming from epoch {current_epoch}")
-        model = jax.device_put_replicated(model, jax.devices())
-        opt_state = jax.device_put_replicated(opt_state, jax.devices())
     except ValueError as e:
         print("Starting fresh training")
         # Replicate model and optimizer state across devices
