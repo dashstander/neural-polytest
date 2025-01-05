@@ -207,7 +207,7 @@ if __name__ == '__main__':
     model_dimension = 2048
 
     # Training hyperparameters
-    train_lr = 1.0e-3
+    train_lr = 2.0e-4
     warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
     #####################################
