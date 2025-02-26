@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 import wandb
 
 from neural_polytest.finite_fields import PyGFPolynomial
-from neural_polytest.transformer import PolynomialTransformerEncoderDecoder
+from neural_polytest.jax.transformer import PolynomialTransformerEncoderDecoder
 
 
 def create_optimizer(train_lr: float, warmup_steps: int, decay_steps: int,  max_grad_norm: float):
