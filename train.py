@@ -205,12 +205,12 @@ if __name__ == '__main__':
     split = int(train_pcnt * len(indices))
     train_idx, test_idx = indices[:split], indices[split:]
     
-    X_left_train = torch.tensor(field_poly_left[train_idx], dtype=torch.float32)
-    X_right_train = torch.tensor(field_poly_right[train_idx], dtype=torch.float32)
+    X_left_train = torch.tensor(field_poly_left[train_idx], dtype=torch.long)
+    X_right_train = torch.tensor(field_poly_right[train_idx], dtype=torch.long)
     y_train = torch.tensor(field_poly_prod[train_idx], dtype=torch.long)
     
-    X_left_test = torch.tensor(field_poly_left[test_idx], dtype=torch.float32)
-    X_right_test = torch.tensor(field_poly_right[test_idx], dtype=torch.float32)
+    X_left_test = torch.tensor(field_poly_left[test_idx], dtype=torch.long)
+    X_right_test = torch.tensor(field_poly_right[test_idx], dtype=torch.long)
     y_test = torch.tensor(field_poly_prod[test_idx], dtype=torch.long)
     
     wandb.config.update({
@@ -265,7 +265,6 @@ if __name__ == '__main__':
     optimizer, scheduler = create_optimizer(
         model, train_lr, warmup_steps, decay_steps
     )
-    
   
     # Try to restore from checkpoint
     current_epoch = 0
