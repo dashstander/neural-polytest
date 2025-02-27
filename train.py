@@ -193,7 +193,7 @@ if __name__ == '__main__':
     n_epochs = 5000 + 100
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 14
+    batch_size = 2 ** 15
     embed_dimension = 512
     n_heads = 8
     n_layers = 1
@@ -203,7 +203,7 @@ if __name__ == '__main__':
     train_lr = 2.0e-4
     warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
-    use_amp = False       # Enable automatic mixed precision
+    use_amp = True      # Enable automatic mixed precision
     #####################################
     
     # Set device
