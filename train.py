@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.nn.functional import cross_entropy
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, StackDataset
 from tqdm.auto import tqdm
 import wandb
 
@@ -82,11 +82,9 @@ def train_epoch(model, optimizer, scheduler, dataloader, device):
     total_loss = 0.0
     total_entropy = 0.0
     
-    for batch_x, batch_y in dataloader:
-        # Unpack and move to device
-        x_left, x_right = batch_x
+    for x_left, x_right, targets in dataloader:
         x_left, x_right = x_left.to(device), x_right.to(device)
-        targets = batch_y.to(device)
+        targets = targets.to(device)
         
         # Forward pass
         optimizer.zero_grad()
@@ -222,12 +220,14 @@ if __name__ == '__main__':
     
     # Create data loaders
     train_dataset = TensorDataset(
-        (X_left_train, X_right_train),
+        X_left_train,
+        X_right_train,
         y_train
     )
     
     test_dataset = TensorDataset(
-        (X_left_test, X_right_test),
+        X_left_test,
+        X_right_test,
         y_test
     )
     
