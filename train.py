@@ -167,16 +167,14 @@ def evaluate(model, dataloader, device, use_amp=False):
                     pred = model(x_left, x_right)
                     
                     # Use torch's vmap for cross entropy
-                    per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-                    loss = torch.mean(torch.mean(per_example_loss, dim=0))
+                    loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets)
                 
             else:
                 # Standard precision evaluation
                 pred = model(x_left, x_right)
                 
                 # Use torch's vmap for cross entropy
-                per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-                loss = torch.mean(torch.mean(per_example_loss, dim=0))
+                loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets)
                 
             
             total_loss += loss.item()
