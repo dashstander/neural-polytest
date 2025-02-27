@@ -110,16 +110,10 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
         if scaler is not None:
             with torch.amp.autocast('cuda'):
                 pred = model(x_left, x_right)
-                
-                # Use torch's vmap for cross entropy across batch dimension
-                per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-                coeff_losses = torch.mean(per_example_loss, dim=0)
-                loss = torch.mean(coeff_losses)
+                loss = torch.vmap(cross_entropy)(pred, targets).mean()
             
-            # Scaled backward pass
             scaler.scale(loss).backward()
             
-            # Scaled gradient clipping
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             
@@ -131,10 +125,7 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
             # Standard precision training (CPU or if AMP is disabled)
             pred = model(x_left, x_right)
             
-            # Use torch's vmap for cross entropy across batch dimension
-            per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-            coeff_losses = torch.mean(per_example_loss, dim=0)
-            loss = torch.mean(coeff_losses)
+            loss = torch.vmap(cross_entropy)(pred, targets).mean()
             
             # Standard backward pass
             loss.backward()
@@ -155,10 +146,6 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
             "loss/train": loss.item(),
         }
         
-        # Log each coefficient's loss
-        for i in range(p):
-            metrics[f"coeff_loss/deg{i}"] = coeff_losses[i].item()
-            
         wandb.log(metrics)
     
     return model, total_loss / len(dataloader)
