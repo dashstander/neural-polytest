@@ -4,7 +4,8 @@ import numpy as np
 import torch
 from torch.nn.functional import cross_entropy
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, StackDataset
+from torch.utils.data import DataLoader, TensorDataset
+from torch.cuda.amp import autocast, GradScaler
 from tqdm.auto import tqdm
 import wandb
 
@@ -30,7 +31,16 @@ def create_optimizer(model, train_lr, warmup_steps, decay_steps):
     return optimizer, scheduler
 
 
-def save_checkpoint(model, optimizer, scheduler, rng_state, current_epoch, save_dir="checkpoints"):
+def compute_logit_entropy(logits):
+    """Compute average entropy of the logit distributions"""
+    probs = torch.softmax(logits, dim=-1)
+    # Avoid log(0) by adding small epsilon
+    eps = 1e-10
+    entropy = -torch.sum(probs * torch.log(probs + eps), dim=-1)
+    return torch.mean(entropy)
+
+
+def save_checkpoint(model, optimizer, scheduler, rng_state, current_epoch, scaler=None, save_dir="checkpoints"):
     """Save complete training state with epoch numbers in filenames."""
     os.makedirs(save_dir, exist_ok=True)
     
@@ -42,10 +52,14 @@ def save_checkpoint(model, optimizer, scheduler, rng_state, current_epoch, save_
         'rng_state': rng_state
     }
     
+    # Save scaler state if using mixed precision
+    if scaler is not None:
+        checkpoint['scaler_state_dict'] = scaler.state_dict()
+    
     torch.save(checkpoint, os.path.join(save_dir, f"checkpoint_{current_epoch}.pt"))
 
 
-def load_latest_checkpoint(model, optimizer, scheduler, device, save_dir="checkpoints"):
+def load_latest_checkpoint(model, optimizer, scheduler, device, scaler=None, save_dir="checkpoints"):
     """Load the most recent checkpoint"""
     
     if not os.path.exists(save_dir):
@@ -67,6 +81,10 @@ def load_latest_checkpoint(model, optimizer, scheduler, device, save_dir="checkp
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     rng_state = checkpoint['rng_state']
     
+    # Load scaler state if available and if using mixed precision
+    if scaler is not None and 'scaler_state_dict' in checkpoint:
+        scaler.load_state_dict(checkpoint['scaler_state_dict'])
+    
     # Ensure the optimizer is using the correct device
     for state in optimizer.state.values():
         for k, v in state.items():
@@ -76,37 +94,59 @@ def load_latest_checkpoint(model, optimizer, scheduler, device, save_dir="checkp
     return model, optimizer, scheduler, rng_state, latest_epoch
 
 
-def train_epoch(model, optimizer, scheduler, dataloader, device):
-    """Train the model for one epoch"""
+def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
+    """Train the model for one epoch with optional mixed precision"""
     model.train()
     total_loss = 0.0
-    total_entropy = 0.0
     
     for x_left, x_right, targets in dataloader:
+        # Move data to device
         x_left, x_right = x_left.to(device), x_right.to(device)
         targets = targets.to(device)
         
-        # Forward pass
+        # Zero gradients
         optimizer.zero_grad()
-        pred = model(x_left, x_right)
         
-        # Convert targets to one-hot
+        # Mixed precision forward pass
+        if scaler is not None:
+            with torch.amp.autocast():
+                pred = model(x_left, x_right)
+                
+                # Use torch's vmap for cross entropy across batch dimension
+                per_example_loss = torch.vmap(cross_entropy)(pred, targets)
+                coeff_losses = torch.mean(per_example_loss, dim=0)
+                loss = torch.mean(coeff_losses)
+            
+            # Scaled backward pass
+            scaler.scale(loss).backward()
+            
+            # Scaled gradient clipping
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+            
+            # Update weights with scaler
+            scaler.step(optimizer)
+            scaler.update()
+            
+        else:
+            # Standard precision training (CPU or if AMP is disabled)
+            pred = model(x_left, x_right)
+            
+            # Use torch's vmap for cross entropy across batch dimension
+            per_example_loss = torch.vmap(cross_entropy)(pred, targets)
+            coeff_losses = torch.mean(per_example_loss, dim=0)
+            loss = torch.mean(coeff_losses)
+            
+            # Standard backward pass
+            loss.backward()
+            
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+            
+            # Update weights
+            optimizer.step()
         
-        # Compute loss for each coefficient separately
-        per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-        coeff_losses = torch.mean(per_example_loss, dim=0)
-        loss = torch.mean(coeff_losses)
-        
-        # Compute entropy of predictions
-        
-        # Backward pass
-        loss.backward()
-        
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-        
-        # Update weights
-        optimizer.step()
+        # Update learning rate scheduler
         scheduler.step()
         
         total_loss += loss.item()
@@ -116,38 +156,53 @@ def train_epoch(model, optimizer, scheduler, dataloader, device):
             "loss/train": loss.item(),
         }
         
+        # Log each coefficient's loss
+        for i in range(p):
+            metrics[f"coeff_loss/deg{i}"] = coeff_losses[i].item()
+            
         wandb.log(metrics)
     
-    return model, total_loss / len(dataloader), total_entropy / len(dataloader)
+    return model, total_loss / len(dataloader)
 
-
-def evaluate(model, dataloader, device):
-    """Evaluate the model on the provided dataloader"""
+def evaluate(model, dataloader, device, use_amp=False):
+    """Evaluate the model on the provided dataloader with optional mixed precision"""
     model.eval()
     total_loss = 0.0
+    total_entropy = 0.0
     
     with torch.no_grad():
-        for batch_x, batch_y in dataloader:
-            # Unpack and move to device
-            x_left, x_right = batch_x
+        for x_left, x_right, targets in dataloader:
+            # Move data to device
             x_left, x_right = x_left.to(device), x_right.to(device)
-            targets = batch_y.to(device)
+            targets = targets.to(device)
             
-            # Forward pass
-            pred = model(x_left, x_right)
-            
-            # Convert targets to one-hot
-            
-            # Compute loss
-            per_example_loss = torch.vmap(cross_entropy)(pred, targets)
-            loss = torch.mean(torch.mean(per_example_loss, dim=0))
-            
-            # Compute entropy
+            # Mixed precision forward pass for evaluation
+            if use_amp and torch.cuda.is_available():
+                with torch.amp.autocast('cuda'):
+                    pred = model(x_left, x_right)
+                    
+                    # Use torch's vmap for cross entropy
+                    per_example_loss = torch.vmap(cross_entropy)(pred, targets)
+                    loss = torch.mean(torch.mean(per_example_loss, dim=0))
+                
+            else:
+                # Standard precision evaluation
+                pred = model(x_left, x_right)
+                
+                # Use torch's vmap for cross entropy
+                per_example_loss = torch.vmap(cross_entropy)(pred, targets)
+                loss = torch.mean(torch.mean(per_example_loss, dim=0))
+                
+                # Compute entropy
+                entropy = compute_logit_entropy(pred)
             
             total_loss += loss.item()
+            total_entropy += entropy.item()
     
     return total_loss / len(dataloader)
 
+
+# No need for custom loss class as we're using torch.nn.functional.cross_entropy
 
 
 if __name__ == '__main__':
@@ -158,7 +213,7 @@ if __name__ == '__main__':
     n_epochs = 5000 + 100
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 16
+    batch_size = 2 ** 17  # Reduced to match the update
     embed_dimension = 512
     n_heads = 8
     n_layers = 1
@@ -168,11 +223,15 @@ if __name__ == '__main__':
     train_lr = 2.0e-4
     warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
+    use_amp = True       # Enable automatic mixed precision
     #####################################
     
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device} device")
+    
+    # Initialize gradient scaler for mixed precision training
+    scaler = GradScaler() if torch.cuda.is_available() else None
     
     # Set random seeds for reproducibility
     torch.manual_seed(seed)
@@ -254,23 +313,27 @@ if __name__ == '__main__':
     
     # Initialize model
     model = PolynomialTransformer(
-        p,
-        embed_dimension,
-        n_heads,
-        model_dimension,
-        n_layers
+        p=p,
+        embed_dim=embed_dimension,
+        num_heads=n_heads,
+        ff_dim=model_dimension,
+        num_layers=n_layers
     ).to(device)
     
     # Initialize optimizer and scheduler
     optimizer, scheduler = create_optimizer(
-        model, train_lr, warmup_steps, decay_steps
+        model, train_lr, warmup_steps, decay_steps, max_grad_norm
     )
-  
+    
+    
+    # Initialize wandb config with AMP status
+    wandb.config.update({"use_amp": use_amp})
+    
     # Try to restore from checkpoint
     current_epoch = 0
     try:
         model, optimizer, scheduler, rng_state, current_epoch = load_latest_checkpoint(
-            model, optimizer, scheduler, device
+            model, optimizer, scheduler, device, scaler
         )
         torch.set_rng_state(rng_state)
         print(f"Resuming from epoch {current_epoch}")
@@ -280,30 +343,33 @@ if __name__ == '__main__':
     # Training loop
     for epoch in tqdm(range(current_epoch, n_epochs)):
         # Train for one epoch
-        model, train_loss, train_entropy = train_epoch(
-            model, optimizer, scheduler, train_loader, device
+        model, train_loss = train_epoch(
+            model, optimizer, scheduler, train_loader, device,
+            scaler if use_amp else None
         )
         
         if epoch % 1 == 0:
             # Evaluate on test data
-            test_loss, test_entropy = evaluate(
-                model, test_loader, device
+            test_loss = evaluate(
+                model, test_loader, device,
+                use_amp=use_amp
             )
             
             metrics = {
                 "loss/epoch": train_loss,
                 "loss/test": test_loss,
-                "test_entropy": test_entropy,
                 "epoch": epoch,
             }
             wandb.log(metrics)
         
         # Save checkpoint every 100 epochs and at the end
         if epoch % 100 == 0:
-            save_checkpoint(model, optimizer, scheduler, torch.get_rng_state(), epoch)
+            save_checkpoint(model, optimizer, scheduler, torch.get_rng_state(), epoch, 
+                           scaler if use_amp else None)
         
-        if test_loss < 1.0e-7:
-            save_checkpoint(model, optimizer, scheduler, torch.get_rng_state(), epoch)
+        if test_loss < 1.0e-8:
+            save_checkpoint(model, optimizer, scheduler, torch.get_rng_state(), epoch,
+                           scaler if use_amp else None)
             print(f'Loss {test_loss} below threshold')
             break
     
