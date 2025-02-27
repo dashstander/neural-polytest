@@ -222,12 +222,12 @@ if __name__ == '__main__':
     
     # Create data loaders
     train_dataset = TensorDataset(
-        torch.stack([X_left_train, X_right_train]),
+        (X_left_train, X_right_train),
         y_train
     )
     
     test_dataset = TensorDataset(
-        torch.stack([X_left_test, X_right_test]),
+        (X_left_test, X_right_test),
         y_test
     )
     
