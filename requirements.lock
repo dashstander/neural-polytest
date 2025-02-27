@@ -52,8 +52,6 @@ docker-pycreds==0.4.0
     # via wandb
 einops==0.8.1
     # via transformer-lens
-equinox==0.11.11
-    # via neural-polytest
 etils==1.11.0
     # via optax
 fancy-einsum==0.0.3
@@ -87,15 +85,12 @@ idna==3.10
     # via yarl
 jax==0.4.38
     # via chex
-    # via equinox
-    # via neural-polytest
     # via optax
 jaxlib==0.4.38
     # via chex
     # via jax
     # via optax
 jaxtyping==0.2.36
-    # via equinox
     # via transformer-lens
 jinja2==3.1.5
     # via torch
@@ -244,7 +239,6 @@ typeguard==4.4.2
     # via transformer-lens
 typing-extensions==4.12.2
     # via chex
-    # via equinox
     # via etils
     # via galois
     # via huggingface-hub

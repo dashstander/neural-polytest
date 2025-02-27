@@ -87,8 +87,6 @@ docker-pycreds==0.4.0
     # via wandb
 einops==0.8.1
     # via transformer-lens
-equinox==0.11.11
-    # via neural-polytest
 etils==1.11.0
     # via optax
 executing==2.1.0
@@ -145,15 +143,12 @@ isoduration==20.11.0
     # via jsonschema
 jax==0.4.38
     # via chex
-    # via equinox
-    # via neural-polytest
     # via optax
 jaxlib==0.4.38
     # via chex
     # via jax
     # via optax
 jaxtyping==0.2.36
-    # via equinox
     # via transformer-lens
 jedi==0.19.2
     # via ipython
@@ -458,7 +453,6 @@ types-python-dateutil==2.9.0.20241206
 typing-extensions==4.12.2
     # via anyio
     # via chex
-    # via equinox
     # via etils
     # via galois
     # via huggingface-hub
