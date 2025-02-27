@@ -154,8 +154,7 @@ def evaluate(model, dataloader, device, use_amp=False):
     """Evaluate the model on the provided dataloader with optional mixed precision"""
     model.eval()
     total_loss = 0.0
-    total_entropy = 0.0
-    
+        
     with torch.no_grad():
         for x_left, x_right, targets in dataloader:
             # Move data to device
@@ -179,11 +178,8 @@ def evaluate(model, dataloader, device, use_amp=False):
                 per_example_loss = torch.vmap(cross_entropy)(pred, targets)
                 loss = torch.mean(torch.mean(per_example_loss, dim=0))
                 
-                # Compute entropy
-                entropy = compute_logit_entropy(pred)
             
             total_loss += loss.item()
-            total_entropy += entropy.item()
     
     return total_loss / len(dataloader)
 
