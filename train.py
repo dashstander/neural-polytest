@@ -110,7 +110,7 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
         if scaler is not None:
             with torch.amp.autocast('cuda'):
                 pred = model(x_left, x_right)
-                loss = torch.vmap(cross_entropy)(pred, targets).mean()
+                loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
             
             scaler.scale(loss).backward()
             
@@ -125,7 +125,7 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
             # Standard precision training (CPU or if AMP is disabled)
             pred = model(x_left, x_right)
             
-            loss = torch.vmap(cross_entropy)(pred, targets).mean()
+            loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
             
             # Standard backward pass
             loss.backward()
@@ -167,14 +167,14 @@ def evaluate(model, dataloader, device, use_amp=False):
                     pred = model(x_left, x_right)
                     
                     # Use torch's vmap for cross entropy
-                    loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets)
+                    loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
                 
             else:
                 # Standard precision evaluation
                 pred = model(x_left, x_right)
                 
                 # Use torch's vmap for cross entropy
-                loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets)
+                loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
                 
             
             total_loss += loss.item()
