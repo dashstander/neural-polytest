@@ -322,7 +322,7 @@ if __name__ == '__main__':
     
     # Initialize optimizer and scheduler
     optimizer, scheduler = create_optimizer(
-        model, train_lr, warmup_steps, decay_steps, max_grad_norm
+        model, train_lr, warmup_steps, decay_steps
     )
     
     
