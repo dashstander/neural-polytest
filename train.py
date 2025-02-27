@@ -154,7 +154,7 @@ def evaluate(model, dataloader, device, use_amp=False):
     """Evaluate the model on the provided dataloader with optional mixed precision"""
     model.eval()
     total_loss = 0.0
-        
+
     with torch.no_grad():
         for x_left, x_right, targets in dataloader:
             # Move data to device
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     train_lr = 2.0e-4
     warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
-    use_amp = True       # Enable automatic mixed precision
+    use_amp = False       # Enable automatic mixed precision
     #####################################
     
     # Set device
