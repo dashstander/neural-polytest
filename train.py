@@ -254,11 +254,11 @@ if __name__ == '__main__':
     
     # Initialize model
     model = PolynomialTransformer(
-        p=p,
-        embed_dim=embed_dimension,
-        num_heads=n_heads,
-        ff_dim=model_dimension,
-        num_layers=n_layers
+        p,
+        embed_dimension,
+        n_heads,
+        model_dimension,
+        n_layers
     ).to(device)
     
     # Initialize optimizer and scheduler
