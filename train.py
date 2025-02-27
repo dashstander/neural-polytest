@@ -213,7 +213,7 @@ if __name__ == '__main__':
     n_epochs = 5000 + 100
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 17  # Reduced to match the update
+    batch_size = 2 ** 16
     embed_dimension = 512
     n_heads = 8
     n_layers = 1
