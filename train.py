@@ -109,7 +109,7 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
         
         # Mixed precision forward pass
         if scaler is not None:
-            with torch.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 pred = model(x_left, x_right)
                 
                 # Use torch's vmap for cross entropy across batch dimension
