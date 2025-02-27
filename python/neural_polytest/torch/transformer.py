@@ -2,9 +2,6 @@ import torch
 from torch import nn
 from torch.nn.functional import softmax, relu
 import math
-import numpy as np
-import jax
-import jax.numpy as jnp
 from transformer_lens.hook_points import HookedRootModule, HookPoint
 
 
