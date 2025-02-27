@@ -5,7 +5,6 @@ import torch
 from torch.nn.functional import cross_entropy
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from torch.cuda.amp import autocast, GradScaler
 from tqdm.auto import tqdm
 import wandb
 
@@ -213,7 +212,7 @@ if __name__ == '__main__':
     n_epochs = 5000 + 100
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 16
+    batch_size = 2 ** 15
     embed_dimension = 512
     n_heads = 8
     n_layers = 1
@@ -231,7 +230,7 @@ if __name__ == '__main__':
     print(f"Using {device} device")
     
     # Initialize gradient scaler for mixed precision training
-    scaler = GradScaler() if torch.cuda.is_available() else None
+    scaler = torch.amp.GradScaler() if torch.cuda.is_available() else None
     
     # Set random seeds for reproducibility
     torch.manual_seed(seed)
