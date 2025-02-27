@@ -7,7 +7,6 @@ authors = [
 ]
 dependencies = [
     "galois>=0.4.3",
-    "optax>=0.2.4",
     "wandb>=0.19.1",
     "tqdm>=4.67.1",
     "torch>=2.6.0",
