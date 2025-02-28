@@ -152,7 +152,6 @@ class HookedDecoderLayer(HookedRootModule):
         self_attn = self.self_attention(normed_x, normed_x, normed_x)
         x = self_attn_input + self.hook_self_attn_output(self_attn)
         
-        
         # MLP
         ff_input = self.hook_ff_input(x)
         normed_x = self.ff_norm(ff_input)

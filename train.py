@@ -93,62 +93,90 @@ def load_latest_checkpoint(model, optimizer, scheduler, device, scaler=None, sav
     return model, optimizer, scheduler, rng_state, latest_epoch
 
 
-def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None):
-    """Train the model for one epoch with optional mixed precision"""
+def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None, accumulation_steps=1):
+    """Train the model for one epoch with optional mixed precision and gradient accumulation"""
     model.train()
     total_loss = 0.0
+    batch_count = 0
     
-    for x_left, x_right, targets in dataloader:
+    # Zero gradients at the beginning
+    optimizer.zero_grad()
+    
+    for i, (x_left, x_right, targets) in enumerate(dataloader):
         # Move data to device
         x_left, x_right = x_left.to(device), x_right.to(device)
         targets = targets.to(device)
-        
-        # Zero gradients
-        optimizer.zero_grad()
         
         # Mixed precision forward pass
         if scaler is not None:
             with torch.amp.autocast('cuda'):
                 pred = model(x_left, x_right)
                 loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
+                
+                # Normalize loss by accumulation steps (to keep gradient magnitude consistent)
+                loss = loss / accumulation_steps
             
+            # Scaled backward pass
             scaler.scale(loss).backward()
             
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-            
-            # Update weights with scaler
-            scaler.step(optimizer)
-            scaler.update()
+            # Only update weights after accumulating gradients for specified number of steps
+            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(dataloader):
+                # Unscale before gradient clipping
+                scaler.unscale_(optimizer)
+                
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                
+                # Update weights with scaler
+                scaler.step(optimizer)
+                scaler.update()
+                
+                # Update learning rate scheduler (once per effective batch)
+                scheduler.step()
+                
+                # Zero gradients after update
+                optimizer.zero_grad()
             
         else:
             # Standard precision training (CPU or if AMP is disabled)
             pred = model(x_left, x_right)
-            
             loss = torch.vmap(cross_entropy, in_dims=(1, 1))(pred, targets).mean()
+            
+            # Normalize loss by accumulation steps
+            loss = loss / accumulation_steps
             
             # Standard backward pass
             loss.backward()
             
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-            
-            # Update weights
-            optimizer.step()
+            # Only update weights after accumulating gradients for specified number of steps
+            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(dataloader):
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                
+                # Update weights
+                optimizer.step()
+                
+                # Update learning rate scheduler (once per effective batch)
+                scheduler.step()
+                
+                # Zero gradients after update
+                optimizer.zero_grad()
         
-        # Update learning rate scheduler
-        scheduler.step()
+        # Track total loss (using the unnormalized loss value for reporting)
+        unnormalized_loss = loss.item() * accumulation_steps
+        total_loss += unnormalized_loss
+        batch_count += 1
         
-        total_loss += loss.item()
-        
-        # Log metrics
-        metrics = {
-            "loss/train": loss.item(),
-        }
-        
-        wandb.log(metrics)
+        # Log metrics - only log after complete effective batches
+        if (i + 1) % accumulation_steps == 0 or (i + 1) == len(dataloader):
+            metrics = {
+                "loss/train": unnormalized_loss,
+                "lr": scheduler.get_last_lr()[0]
+            }
+            wandb.log(metrics)
     
-    return model, total_loss / len(dataloader)
+    return model, total_loss / batch_count
+
 
 def evaluate(model, dataloader, device, use_amp=False):
     """Evaluate the model on the provided dataloader with optional mixed precision"""
@@ -204,6 +232,11 @@ if __name__ == '__main__':
     warmup_epochs = 100  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
     use_amp = True      # Enable automatic mixed precision
+
+    # Gradient accumulation settings
+    accumulation_steps = 4  # Number of batches to accumulate gradients over
+    effective_batch_size = batch_size * accumulation_steps
+    print(f"Effective batch size with accumulation: {effective_batch_size}")
     #####################################
     
     # Set device
@@ -285,9 +318,9 @@ if __name__ == '__main__':
         pin_memory=True,
         num_workers=4
     )
-    
+
     # Calculate training steps
-    steps_per_epoch = len(train_loader)
+    steps_per_epoch = len(train_loader) // accumulation_steps  # Effective steps after accumulation
     warmup_steps = warmup_epochs * steps_per_epoch
     decay_steps = (n_epochs - warmup_epochs) * steps_per_epoch
     
@@ -308,6 +341,7 @@ if __name__ == '__main__':
     
     # Initialize wandb config with AMP status
     wandb.config.update({"use_amp": use_amp})
+    wandb.watch(model, log='all')
     
     # Try to restore from checkpoint
     current_epoch = 0
@@ -325,10 +359,11 @@ if __name__ == '__main__':
         # Train for one epoch
         model, train_loss = train_epoch(
             model, optimizer, scheduler, train_loader, device,
-            scaler if use_amp else None
+            scaler if use_amp else None,
+            accumulation_steps
         )
         
-        if epoch % 1 == 0:
+        if epoch % 10 == 0:
             # Evaluate on test data
             test_loss = evaluate(
                 model, test_loader, device,
