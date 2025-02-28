@@ -115,7 +115,7 @@ def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None, ac
                 
                 # Normalize loss by accumulation steps (to keep gradient magnitude consistent)
                 loss = loss / accumulation_steps
-                print(loss)
+                #print(loss)
             
             # Scaled backward pass
             scaler.scale(loss).backward()
