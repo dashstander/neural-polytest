@@ -219,10 +219,10 @@ if __name__ == '__main__':
     # Configurations                    #
     #####################################
     p = 5
-    n_epochs = 5000 + 100
+    n_epochs = 5000 + 200
     seed = 0
     train_pcnt = 0.95
-    batch_size = 2 ** 15
+    batch_size = 2 ** 14
     embed_dimension = 512
     n_heads = 8
     n_layers = 1
@@ -230,12 +230,12 @@ if __name__ == '__main__':
 
     # Training hyperparameters
     train_lr = 2.0e-4
-    warmup_epochs = 100  # Number of epochs for warmup
+    warmup_epochs = 200  # Number of epochs for warmup
     max_grad_norm = 1.0  # Maximum gradient norm for clipping
-    use_amp = True      # Enable automatic mixed precision
+    use_amp = False      # Enable automatic mixed precision
 
     # Gradient accumulation settings
-    accumulation_steps = 4  # Number of batches to accumulate gradients over
+    accumulation_steps = 16  # Number of batches to accumulate gradients over
     effective_batch_size = batch_size * accumulation_steps
     print(f"Effective batch size with accumulation: {effective_batch_size}")
     #####################################
