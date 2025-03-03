@@ -78,7 +78,6 @@ def load_latest_checkpoint(model, optimizer, scheduler, device, scaler=None, sav
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-    rng_state = checkpoint['rng_state']
     
     # Load scaler state if available and if using mixed precision
     if scaler is not None and 'scaler_state_dict' in checkpoint:
@@ -90,7 +89,7 @@ def load_latest_checkpoint(model, optimizer, scheduler, device, scaler=None, sav
             if isinstance(v, torch.Tensor):
                 state[k] = v.to(device)
                 
-    return model, optimizer, scheduler, rng_state, latest_epoch
+    return model, optimizer, scheduler, latest_epoch
 
 
 def train_epoch(model, optimizer, scheduler, dataloader, device, scaler=None, accumulation_steps=1):
@@ -350,7 +349,6 @@ if __name__ == '__main__':
         model, optimizer, scheduler, rng_state, current_epoch = load_latest_checkpoint(
             model, optimizer, scheduler, device, scaler
         )
-        torch.set_rng_state(rng_state)
         print(f"Resuming from epoch {current_epoch}")
     except ValueError as e:
         print("Starting fresh training")
