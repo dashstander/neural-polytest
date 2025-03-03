@@ -219,7 +219,7 @@ if __name__ == '__main__':
     #####################################
     p = 5
     n_epochs = 5000 + 200
-    seed = 0
+    seed = 2
     train_pcnt = 0.95
     batch_size = 2 ** 14
     embed_dimension = 512
