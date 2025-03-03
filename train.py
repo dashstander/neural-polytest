@@ -346,7 +346,7 @@ if __name__ == '__main__':
     # Try to restore from checkpoint
     current_epoch = 0
     try:
-        model, optimizer, scheduler, rng_state, current_epoch = load_latest_checkpoint(
+        model, optimizer, scheduler, current_epoch = load_latest_checkpoint(
             model, optimizer, scheduler, device, scaler
         )
         print(f"Resuming from epoch {current_epoch}")
