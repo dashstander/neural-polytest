@@ -351,6 +351,7 @@ if __name__ == '__main__':
         )
         print(f"Resuming from epoch {current_epoch}")
     except ValueError as e:
+        print(e)
         print("Starting fresh training")
     
     # Training loop
