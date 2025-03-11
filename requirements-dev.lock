@@ -82,6 +82,8 @@ docker-pycreds==0.4.0
     # via wandb
 einops==0.8.1
     # via transformer-lens
+equinox==0.11.12
+    # via neural-polytest
 executing==2.1.0
     # via stack-data
 fancy-einsum==0.0.3
@@ -134,7 +136,13 @@ ipython==8.31.0
     # via ipykernel
 isoduration==20.11.0
     # via jsonschema
+jax==0.5.1
+    # via equinox
+    # via neural-polytest
+jaxlib==0.5.1
+    # via jax
 jaxtyping==0.2.36
+    # via equinox
     # via transformer-lens
 jedi==0.19.2
     # via ipython
@@ -193,6 +201,7 @@ markupsafe==3.0.2
     # via nbconvert
 matplotlib==3.10.0
     # via neural-polytest
+    # via plotnine
 matplotlib-inline==0.1.7
     # via ipykernel
     # via ipython
@@ -200,6 +209,11 @@ mdurl==0.1.2
     # via markdown-it-py
 mistune==3.0.2
     # via nbconvert
+mizani==0.13.1
+    # via plotnine
+ml-dtypes==0.5.1
+    # via jax
+    # via jaxlib
 mpmath==1.3.0
     # via sympy
 multidict==6.1.0
@@ -228,11 +242,21 @@ numpy==2.0.2
     # via contourpy
     # via datasets
     # via galois
+    # via jax
+    # via jaxlib
     # via matplotlib
+    # via mizani
+    # via ml-dtypes
     # via numba
     # via pandas
+    # via patsy
+    # via plotnine
+    # via scipy
+    # via statsmodels
     # via transformer-lens
     # via transformers
+opt-einsum==3.4.0
+    # via jax
 overrides==7.7.0
     # via jupyter-server
 packaging==24.2
@@ -246,14 +270,20 @@ packaging==24.2
     # via matplotlib
     # via nbconvert
     # via pytest
+    # via statsmodels
     # via transformers
 pandas==2.2.3
     # via datasets
+    # via mizani
+    # via plotnine
+    # via statsmodels
     # via transformer-lens
 pandocfilters==1.5.1
     # via nbconvert
 parso==0.8.4
     # via jedi
+patsy==1.0.1
+    # via statsmodels
 pexpect==4.9.0
     # via ipython
 pillow==11.1.0
@@ -262,8 +292,12 @@ pip==24.3.1
 platformdirs==4.3.6
     # via jupyter-core
     # via wandb
+plotnine==0.14.5
+    # via neural-polytest
 pluggy==1.5.0
     # via pytest
+polars==1.24.0
+    # via neural-polytest
 prometheus-client==0.21.1
     # via jupyter-server
 prompt-toolkit==3.0.48
@@ -344,6 +378,12 @@ ruff==0.8.4
 safetensors==0.5.2
     # via accelerate
     # via transformers
+scipy==1.15.2
+    # via jax
+    # via jaxlib
+    # via mizani
+    # via plotnine
+    # via statsmodels
 send2trash==1.8.3
     # via jupyter-server
 sentencepiece==0.2.0
@@ -368,6 +408,8 @@ soupsieve==2.6
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
+statsmodels==0.14.4
+    # via plotnine
 sympy==1.13.1
     # via torch
 terminado==0.18.1
@@ -419,6 +461,7 @@ types-python-dateutil==2.9.0.20241206
     # via arrow
 typing-extensions==4.12.2
     # via anyio
+    # via equinox
     # via galois
     # via huggingface-hub
     # via pydantic
@@ -433,6 +476,8 @@ uri-template==1.3.0
 urllib3==2.3.0
     # via requests
     # via sentry-sdk
+wadler-lindig==0.1.3
+    # via equinox
 wandb==0.19.1
     # via neural-polytest
     # via transformer-lens

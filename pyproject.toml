@@ -12,6 +12,10 @@ dependencies = [
     "torch>=2.6.0",
     "transformer-lens>=2.15.0",
     "matplotlib>=3.10.0",
+    "jax>=0.5.1",
+    "equinox>=0.11.12",
+    "plotnine>=0.14.5",
+    "polars>=1.24.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
